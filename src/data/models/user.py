@@ -1,18 +1,19 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import func
 
 from src.data.models.base import Base
 
 
 class UserRole(StrEnum):
     admin = "admin"
-    operation_manager = "operation_manager"
+    OpsAdmin = "OpsAdmin"
     reviewer = "reviewer"
 
 
@@ -54,7 +55,7 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
 

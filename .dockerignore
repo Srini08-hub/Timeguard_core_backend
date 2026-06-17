@@ -106,3 +106,5 @@ LICENSE
 # Poetry/Pipenv lock files (optional, keep if you want reproducible builds)
 # poetry.lock
 # Pipfile.lock
+
+attachments/
