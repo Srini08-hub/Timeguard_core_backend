@@ -21,5 +21,4 @@ def load_workbook_meta(state: ExcelClassifierState) -> ExcelClassifierState:
         "sheet_names": sheet_names,
         "sheet_queue": list(range(len(sheet_names))),
         "excel_classification": "PENDING",
-        "sheets_checked": 0,
     }

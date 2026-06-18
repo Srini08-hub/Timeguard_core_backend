@@ -1,11 +1,109 @@
 import logging
+from pathlib import Path
+from urllib.parse import urlparse
 
-from src.control.agents.state import TimeguardState
+from langchain_core.runnables import RunnableConfig
+
+from src.config.settings import settings
+from src.control.agents.graph_config import get_db_session
+from src.control.agents.scanned_subgraph import scanned_subgraph
+from src.control.agents.state import AttachmentState, TimeguardState
+from src.data.models.attachment import AttachmentStatus
+from src.data.repositories.attachment_repository import AttachmentRepository
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def scannedpdfnode(state: TimeguardState) -> TimeguardState:
-    logger.info("Routing scanned PDF attachment")
-    return state
+def _current_attachment(state: TimeguardState) -> AttachmentState:
+    attachments = state.get("attachments", [])
+    index = state.get("current_attachment_index", 0)
+
+    if index >= len(attachments):
+        raise ValueError("No attachment available for scanned PDF processing")
+
+    return attachments[index]
+
+
+def _resolve_attachment_path(attachment: AttachmentState) -> Path:
+    attachment_url = attachment.get("attachment_url")
+    if attachment_url:
+        parsed_url = urlparse(attachment_url)
+        candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
+        if candidate.exists():
+            return candidate
+
+    file_name = attachment.get("file_name")
+    if file_name:
+        matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
+        if matches:
+            return matches[0]
+
+    raise FileNotFoundError(
+        f"Unable to resolve a stored file for attachment "
+        f"{attachment.get('file_name', '')}"
+    )
+
+
+def _attachment_status_from_final_status(
+    final_status: str | None,
+) -> AttachmentStatus:
+    if final_status == "TIMESHEET":
+        return AttachmentStatus.TIMESHEET
+
+    return AttachmentStatus.NOT_TIMESHEET
+
+
+async def scannedpdfnode(
+    state: TimeguardState,
+    config: RunnableConfig,
+) -> TimeguardState:
+    db_session = get_db_session(config)
+    attachment_repository = AttachmentRepository(db_session)
+
+    attachment_state = _current_attachment(state)
+    pdf_path = _resolve_attachment_path(attachment_state)
+
+    logger.info(
+        "Processing scanned PDF attachment %s from %s",
+        attachment_state.get("file_name", ""),
+        pdf_path,
+    )
+
+    scanned_state = scanned_subgraph.invoke({"pdf_path": str(pdf_path)})
+    classification = scanned_state.get(
+        "final_status",
+        scanned_state.get("scanned_pdf_classification"),
+    )
+    attachment_status = _attachment_status_from_final_status(classification)
+    attachment_db_id = attachment_state.get("attachment_db_id")
+    if attachment_db_id:
+        attachment = await attachment_repository.get_by_id(attachment_db_id)
+        if attachment is not None:
+            await attachment_repository.set_status(
+                attachment,
+                status=attachment_status,
+            )
+            logger.info(
+                "Updated attachment %s to status %s",
+                attachment_db_id,
+                attachment_status,
+            )
+        else:
+            logger.warning(
+                "Attachment %s not found for status update", attachment_db_id
+            )
+
+    current_index = state.get("current_attachment_index", 0)
+    attachments = list(state.get("attachments", []))
+    attachments[current_index] = {
+        **attachment_state,
+        "is_timesheet": classification == "TIMESHEET",
+        "status": attachment_status.value,
+    }
+
+    return {
+        **state,
+        "attachments": attachments,
+        # "scanned_pdf_classification": classification,
+    }

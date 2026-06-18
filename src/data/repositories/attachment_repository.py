@@ -1,7 +1,7 @@
 import logging
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.data.models.attachment import Attachment, AttachmentStatus
 
@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 class AttachmentRepository:
-    def __init__(self, db: Session) -> None:
-        self._db = db
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
 
-    def create(
+    async def create(
         self,
         *,
         email_id: UUID,
@@ -22,13 +22,13 @@ class AttachmentRepository:
     ) -> Attachment:
         attachment = Attachment(
             email_id=email_id,
-            attachment_url="",  # placeholder until file is saved
+            attachment_url="",
             file_name=filename,
             document_type=document_type,
             status=status,
         )
-        self._db.add(attachment)
-        self._db.flush()
+        self._session.add(attachment)
+        await self._session.flush()
         logger.info(
             "Created Attachment record %s for email_id=%s",
             attachment.attachment_id,
@@ -36,7 +36,7 @@ class AttachmentRepository:
         )
         return attachment
 
-    def set_url_and_status(
+    async def set_url_and_status(
         self,
         attachment: Attachment,
         *,
@@ -45,21 +45,21 @@ class AttachmentRepository:
     ) -> None:
         attachment.attachment_url = url
         attachment.status = status
-        self._db.flush()
+        await self._session.flush()
 
-    def get_by_id(self, attachment_id: UUID) -> Attachment | None:
-        return self._db.get(Attachment, attachment_id)
+    async def get_by_id(self, attachment_id: UUID) -> Attachment | None:
+        return await self._session.get(Attachment, attachment_id)
 
-    def set_status(
+    async def set_status(
         self,
         attachment: Attachment,
         *,
         status: AttachmentStatus,
     ) -> None:
         attachment.status = status
-        self._db.flush()
+        await self._session.flush()
 
-    def set_failed(
+    async def set_failed(
         self,
         attachment: Attachment,
         *,
@@ -69,4 +69,4 @@ class AttachmentRepository:
         attachment.status = AttachmentStatus.FAILED
         attachment.failure_stage = failure_stage
         attachment.failure_reason = failure_reason
-        self._db.flush()
+        await self._session.flush()

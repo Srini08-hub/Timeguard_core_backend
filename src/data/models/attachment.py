@@ -16,11 +16,10 @@ if TYPE_CHECKING:
 
 class AttachmentStatus(StrEnum):
     PENDING = "pending"
-    # NOT_SUPPORTED_DOCUMENT = "not_supported_document"
     TIMESHEET = "timesheet"
     NOT_TIMESHEET = "not_timesheet"
-    PROCESSING = "processing"
     PROCESSED = "processed"
+    NOT_PROCESSED = "not_processed"
     FAILED = "failed"
 
 
@@ -55,7 +54,11 @@ class Attachment(Base):
     )
 
     status: Mapped[AttachmentStatus] = mapped_column(
-        SQLEnum(AttachmentStatus, name="attachment_status"),
+        SQLEnum(
+            AttachmentStatus,
+            name="attachment_status",
+            values_callable=lambda enum_cls: [status.value for status in enum_cls],
+        ),
         nullable=False,
         default=AttachmentStatus.PENDING,
     )

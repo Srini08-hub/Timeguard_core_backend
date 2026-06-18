@@ -15,13 +15,18 @@ if TYPE_CHECKING:
 
 
 class EmailStatus(StrEnum):
+    NOT_RECEIVED = "not_received"
     RECEIVED = "received"
-    CLASSIFYING = "classifying"
-    TIMESHEET_DETECTED = "timesheet_detected"
-    NOT_TIMESHEET = "not_timesheet"
-    PROCESSING = "processing"
+    CLASSIFYED = "classified"
     PROCESSED = "processed"
+    NOT_PROCESSED = "not_processed"
     FAILED = "failed"
+
+
+class EmailClassificationStatus(StrEnum):
+    UNKNOWN = "unknown"
+    TIMESHEET = "timesheet"
+    NOT_TIMESHEET = "not_timesheet"
 
 
 class Email(Base):
@@ -59,8 +64,22 @@ class Email(Base):
         nullable=True,
     )
 
+    classification_status: Mapped[EmailClassificationStatus] = mapped_column(
+        SQLEnum(
+            EmailClassificationStatus,
+            name="email_classification_status",
+            values_callable=lambda enum_cls: [status.value for status in enum_cls],
+        ),
+        nullable=False,
+        default=EmailClassificationStatus.UNKNOWN,
+    )
+
     status: Mapped[EmailStatus] = mapped_column(
-        SQLEnum(EmailStatus, name="email_status"),
+        SQLEnum(
+            EmailStatus,
+            name="email_status",
+            values_callable=lambda enum_cls: [status.value for status in enum_cls],
+        ),
         nullable=False,
         default=EmailStatus.RECEIVED,
     )

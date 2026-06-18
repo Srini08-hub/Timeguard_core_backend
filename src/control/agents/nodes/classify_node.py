@@ -23,5 +23,5 @@ def classify_attachments_router(state: TimeguardState) -> str:
     elif doc_type == "excel":
         return "excel_node"
 
-    # Skip unsupported attachment
+    logger.warning("Unsupported doc_type %r at index %d", doc_type, index)
     return "increment_attachment_node"
