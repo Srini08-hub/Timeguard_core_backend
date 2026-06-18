@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def classify_page(text: str, images: list, page_area: float) -> str:
     word_count = len(text.split())
-    has_real_text = word_count >= 10
+    has_real_text = word_count > 0
 
     has_significant_image = any(
         (img["width"] * img["height"]) >= 0.30 * page_area for img in images
@@ -81,11 +81,11 @@ def _resolve_attachment_path(attachment: AttachmentState) -> Path:
         if candidate.exists():
             return candidate
 
-    file_name = attachment.get("file_name")
-    if file_name:
-        matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
-        if matches:
-            return matches[0]
+    # file_name = attachment.get("file_name")
+    # if file_name:
+    #     matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
+    #     if matches:
+    #         return matches[0]
 
     raise FileNotFoundError(
         f"Unable to resolve a stored file for attachment"
@@ -93,37 +93,45 @@ def _resolve_attachment_path(attachment: AttachmentState) -> Path:
     )
 
 
-def _current_attachment(state: TimeguardState) -> AttachmentState:
-    attachments = state.get("attachments", [])
-    index = state.get("current_attachment_index", 0)
+# def _current_attachment(state: TimeguardState) -> AttachmentState:
+#     attachments = state.get("attachments", [])
+#     index = state.get("current_attachment_index", 0)
 
-    if index >= len(attachments):
-        raise ValueError("No attachment available for PDF classification")
+#     # if index >= len(attachments):
+#     #     raise ValueError("No attachment available for PDF classification")
 
-    return attachments[index]
+#     return attachments[index]
 
 
 def pdf_classifying_node(state: TimeguardState) -> TimeguardState:
-    attachment = _current_attachment(state)
-    pdf_path = _resolve_attachment_path(attachment)
+    # attachment = _current_attachment(state)
+    index = state.get("current_attachment_index", 0)
+    attachments = state.get("attachments", [])
+    pdf_path = _resolve_attachment_path(attachments[index])
     classification = classify_pdf(pdf_path)
 
+    attachments[index] = {
+        **attachments[index],
+        "doc_type": classification,
+    }
     logger.info(
         "Classified attachment %s (%s) as %s",
-        attachment.get("file_name", ""),
+        attachments[index].get("file_name", ""),
         pdf_path,
         classification,
     )
 
     return {
         **state,
-        "pdf_classification": classification,
+        "attachments": attachments,
     }
 
 
 def route_pdf_classification(state: TimeguardState) -> str:
-    classification = state.get("pdf_classification")
-
+    index = state.get("current_attachment_index", 0)
+    attachments = state.get("attachments", [])
+    classification = attachments[index].get("doc_type")
+    # logger.info()
     if classification == "digital_pdf":
         return "digitalpdfnode"
     if classification == "scanned_pdf":
@@ -135,4 +143,4 @@ def route_pdf_classification(state: TimeguardState) -> str:
 
 
 # Backwards-compatible alias for existing references.
-pdf_node = pdf_classifying_node
+# pdf_node = pdf_classifying_node

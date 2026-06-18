@@ -4,12 +4,14 @@ from dataclasses import dataclass, field
 from email.utils import parseaddr
 from typing import Any
 
+import httplib2
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from src.config.settings import settings
+from src.core.exceptions.custom_exception import GmailFetchError
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +64,32 @@ class GmailService:
                 .get(userId="me", id=gmail_message_id, format="full")
                 .execute()
             )
+
+            # Move parsing INSIDE the try block to catch structural issues
+            return self._parse_message(msg)
+
         except HttpError as exc:
             logger.error(
-                "Gmail API error fetching message %s: %s", gmail_message_id, exc
+                "Google API rejected the request for %s: %s", gmail_message_id, exc
             )
-            raise
+            status_code = exc.resp.status if hasattr(exc, "resp") else 500
+            raise GmailFetchError(f"API Error: {exc}", status_code=status_code) from exc
 
-        return self._parse_message(msg)
+        except (httplib2.HttpLib2Error, ConnectionError) as exc:
+            logger.error(
+                "Network transport failure fetching %s: %s", gmail_message_id, exc
+            )
+            raise GmailFetchError(
+                "Network or connection timeout.", status_code=503
+            ) from exc
+
+        except Exception as exc:
+            logger.error(
+                "Local processing or parsing error for %s: %s", gmail_message_id, exc
+            )
+            raise GmailFetchError(
+                f"Internal parsing bug: {str(exc)}", status_code=500
+            ) from exc
 
     def download_attachment(self, gmail_message_id: str, attachment_id: str) -> bytes:
         """Download a raw attachment and return its decoded bytes."""

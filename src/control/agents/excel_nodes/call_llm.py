@@ -49,8 +49,4 @@ REASON: [one sentence]
     if not isinstance(response, ExcelClassificationResponse):
         raise ValueError("Invalid LLM response type")
 
-    return {
-        **state,
-        "excel_classification": response.classification.value,
-        "reason": response.reason,
-    }
+    return {**state, "excel_classification": response.classification.value}

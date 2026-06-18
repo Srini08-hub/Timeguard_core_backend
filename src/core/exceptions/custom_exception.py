@@ -41,3 +41,15 @@ class ConflictException(ApplicationException):
 
     def __init__(self, message: str):
         super().__init__(message, status_code=409)
+
+
+class GmailFetchError(ApplicationException):
+    """Raised when an operation to fetch or parse an email from the Gmail API fails.
+
+    This exception acts as a unified wrapper for Google API HttpErrors,
+    network transport failures, and internal email parsing errors.
+    """
+
+    def __init__(self, message: str, status_code: int = 500):
+        # Forward everything cleanly to your base ApplicationException
+        super().__init__(message=message, status_code=status_code)

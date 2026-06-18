@@ -2,53 +2,38 @@ import logging
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from sqlalchemy.orm import Session
 
 from src.control.agents.nodes.classify_node import classify_attachments_router
-from src.control.agents.nodes.digitalpdf_node import build_digitalpdfnode
+from src.control.agents.nodes.digitalpdf_node import digitalpdfnode
 from src.control.agents.nodes.email_body_node import email_body_node
-from src.control.agents.nodes.excel_node import build_excelnode
-from src.control.agents.nodes.fetchparse_node import build_fetch_parse_node
+from src.control.agents.nodes.excel_node import excelnode
+from src.control.agents.nodes.fetchparse_node import fetch_parse_node
 from src.control.agents.nodes.hybridpdf_node import hybridpdfnode
-from src.control.agents.nodes.image_node import image_node
+from src.control.agents.nodes.image_node import imagenode
 from src.control.agents.nodes.incremental_node import increment_attachment_node
-
-# from src.control.agents.nodes.excel_node import excel_node
 from src.control.agents.nodes.pdf_classifying_node import (
     pdf_classifying_node,
     route_pdf_classification,
 )
 from src.control.agents.nodes.scannedpdf_node import scannedpdfnode
 from src.control.agents.state import TimeguardState
-from src.core.services.gmail_service import GmailService
 
 logger = logging.getLogger(__name__)
 
-
-# api_key = settings.GROQ_API_KEY
-# llm=ChatGroq(
-#     model="llama-3.3-70b-versatile",
-#     api_key=api_key,
-#     # max_tokens=800
-# )
-# Load environment variables from .env file
+_email_graph: CompiledStateGraph[TimeguardState] | None = None
 
 
-def build_email_graph(
-    db: Session, gmail_service: GmailService
-) -> CompiledStateGraph[TimeguardState]:
+def build_email_graph() -> CompiledStateGraph[TimeguardState]:
     graph = StateGraph(TimeguardState)
 
-    graph.add_node("fetch_parse", build_fetch_parse_node(gmail_service, db))  # type: ignore
-
+    graph.add_node("fetch_parse", fetch_parse_node)
     graph.add_node("pdf_classifying_node", pdf_classifying_node)
-    graph.add_node("digitalpdfnode", build_digitalpdfnode(db))  # type: ignore
+    graph.add_node("digitalpdfnode", digitalpdfnode)
     graph.add_node("scannedpdfnode", scannedpdfnode)
     graph.add_node("hybridpdfnode", hybridpdfnode)
     graph.add_node("increment_attachment_node", increment_attachment_node)
-
-    graph.add_node("image_node", image_node)
-    graph.add_node("excel_node", build_excelnode(db))  # type: ignore
+    graph.add_node("image_node", imagenode)
+    graph.add_node("excel_node", excelnode)
     graph.add_node("email_body_node", email_body_node)
 
     graph.set_entry_point("fetch_parse")
@@ -60,7 +45,6 @@ def build_email_graph(
             "pdf_classifying_node": "pdf_classifying_node",
             "image_node": "image_node",
             "excel_node": "excel_node",
-            # "increment_attachment_node": "increment_attachment_node",
             "email_body_node": "email_body_node",
         },
     )
@@ -89,7 +73,6 @@ def build_email_graph(
             "pdf_classifying_node": "pdf_classifying_node",
             "image_node": "image_node",
             "excel_node": "excel_node",
-            # "increment_attachment_node": "increment_attachment_node",
             "email_body_node": "email_body_node",
         },
     )
@@ -97,3 +80,10 @@ def build_email_graph(
     graph.add_edge("email_body_node", END)
 
     return graph.compile()
+
+
+def get_email_graph() -> CompiledStateGraph[TimeguardState]:
+    global _email_graph
+    if _email_graph is None:
+        _email_graph = build_email_graph()
+    return _email_graph

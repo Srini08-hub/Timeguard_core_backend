@@ -15,7 +15,7 @@ def route_page_has_content(state: PDFClassifierState) -> str:
     #  If the length of this list is 8 or more,
     #  it indicates that the page has enough content to be processed further.
     #  Otherwise, it is considered to have insufficient content and will be skipped.
-    return "fuzzy_match_anchors" if len(combined.split()) >= 8 else "next_page"
+    return "fuzzy_match_anchors" if len(combined.split()) > 0 else "next_page"
 
 
 def route_anchor_found(state: PDFClassifierState) -> str:

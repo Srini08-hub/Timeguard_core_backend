@@ -15,9 +15,18 @@ class PDFClassification(StrEnum):
 
 class PDFClassificationResponse(BaseModel):
     classification: PDFClassification = Field(
-        description="Whether the page belongs to a timesheet"
+        description="Whether the  PDF page is a timesheet."
     )
-    reason: str = Field(description="Short explanation for the classification")
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Model confidence from 0.0 to 1.0.",
+    )
+    reason: str = Field(
+        min_length=1,
+        description="Short rationale based only on visible page evidence.",
+    )
+    # reason: str = Field(description="Short explanation for the classification")
 
 
 def call_llm(state: PDFClassifierState) -> PDFClassifierState:
@@ -75,5 +84,5 @@ REASON: [one sentence]
     return {
         **state,
         "pdf_classification": response.classification.value,
-        "pdf_reason": response.reason,
+        # "pdf_reason": response.reason,
     }

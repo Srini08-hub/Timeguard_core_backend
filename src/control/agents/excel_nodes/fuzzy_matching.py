@@ -80,5 +80,4 @@ def fuzzy_match_anchors(state: ExcelClassifierState) -> ExcelClassifierState:
     return {
         **state,
         "anchor_hits": hits,
-        "sheets_checked": state.get("sheets_checked", 0) + 1,
     }
