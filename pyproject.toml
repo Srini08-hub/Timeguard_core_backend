@@ -23,6 +23,7 @@ dependencies = [
     "rapidfuzz>=3.14.5",
     "openpyxl>=3.1.5",
     "langchain-google-genai>=4.2.5",
+    "langsmith>=0.8.16",
 ]
 
 [dependency-groups]
@@ -35,8 +36,11 @@ dev = [
 line-length = 88
 target-version = "py313"
 
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]
+
 
 [tool.mypy]
 files = ["src"]

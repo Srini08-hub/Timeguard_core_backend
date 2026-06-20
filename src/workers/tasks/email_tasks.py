@@ -1,5 +1,6 @@
 import logging
 
+from src.config.settings import settings
 from src.control.agents.graph import get_email_graph
 from src.control.agents.graph_config import (
     DB_SESSION_CONFIG_KEY,
@@ -10,6 +11,8 @@ from src.data.clients import postgress_client
 from src.workers.celery_app import celery_app, run_async
 
 logger = logging.getLogger(__name__)
+
+logger.info(settings.LANGSMITH_PROJECT)
 
 
 async def _classify_email_async(gmail_message_id: str) -> dict:

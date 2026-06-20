@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.data.models.email import Email, EmailClassificationStatus, EmailStatus
 
@@ -109,3 +110,38 @@ class EmailRepository:
             email.email_id,
             classification_status,
         )
+
+    async def get_timesheet_emails(self) -> list[Email]:
+        result = await self._session.execute(
+            select(Email).where(
+                Email.classification_status == EmailClassificationStatus.TIMESHEET
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_non_timesheet_emails(self) -> list[Email]:
+        result = await self._session.execute(
+            select(Email).where(
+                Email.classification_status == EmailClassificationStatus.NOT_TIMESHEET
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_attachments(
+        self,
+        email_id: UUID,
+    ) -> list:
+        stmt = (
+            select(Email)
+            .options(selectinload(Email.attachments))
+            .where(Email.email_id == email_id)
+        )
+
+        result = await self._session.execute(stmt)
+
+        email = result.scalar_one_or_none()
+        if email is None:
+            logger.warning("Email %s not found when fetching attachments", email_id)
+            return []
+
+        return email.attachments
