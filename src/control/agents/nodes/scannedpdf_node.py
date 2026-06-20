@@ -71,19 +71,24 @@ async def scannedpdfnode(
     )
 
     scanned_state = scanned_subgraph.invoke({"pdf_path": str(pdf_path)})
-    classification = scanned_state.get(
-        "final_status",
-        scanned_state.get("scanned_pdf_classification"),
-    )
+
+    classification = scanned_state.get("scanned_pdf_classification")
+
     attachment_status = _attachment_status_from_final_status(classification)
+
     attachment_db_id = attachment_state.get("attachment_db_id")
+
     if attachment_db_id:
         attachment = await attachment_repository.get_by_id(attachment_db_id)
+
         if attachment is not None:
             await attachment_repository.set_status(
                 attachment,
                 status=attachment_status,
             )
+
+            await db_session.commit()
+
             logger.info(
                 "Updated attachment %s to status %s",
                 attachment_db_id,
@@ -91,11 +96,14 @@ async def scannedpdfnode(
             )
         else:
             logger.warning(
-                "Attachment %s not found for status update", attachment_db_id
+                "Attachment %s not found for status update",
+                attachment_db_id,
             )
 
     current_index = state.get("current_attachment_index", 0)
+
     attachments = list(state.get("attachments", []))
+
     attachments[current_index] = {
         **attachment_state,
         "is_timesheet": classification == "TIMESHEET",
@@ -105,5 +113,57 @@ async def scannedpdfnode(
     return {
         **state,
         "attachments": attachments,
-        # "scanned_pdf_classification": classification,
     }
+
+
+# def build_scannedpdfnode(
+#     db_session: Session,
+# ) -> Callable[[TimeguardState], TimeguardState]:
+#     attachment_repository = AttachmentRepository(db_session)
+
+#     def scannedpdfnode(state: TimeguardState) -> TimeguardState:
+#         attachment_state = _current_attachment(state)
+#         pdf_path = _resolve_attachment_path(attachment_state)
+
+#         logger.info(
+#             "Processing scanned PDF attachment %s from %s",
+#             attachment_state.get("file_name", ""),
+#             pdf_path,
+#         )
+
+#         scanned_state = scanned_subgraph.invoke({"pdf_path": str(pdf_path)})
+#         classification = scanned_state.get(
+#             "final_status",
+#             scanned_state.get("scanned_pdf_classification"),
+#         )
+#         attachment_status = _attachment_status_from_final_status(classification)
+#         attachment_db_id = attachment_state.get("attachment_db_id")
+#         if attachment_db_id:
+#             attachment = attachment_repository.get_by_id(attachment_db_id)
+#             if attachment is not None:
+#                 attachment_repository.set_status(attachment, status=attachment_status)
+#                 logger.info(
+#                     "Updated attachment %s to status %s",
+#                     attachment_db_id,
+#                     attachment_status,
+#                 )
+#             else:
+#                 logger.warning(
+#                     "Attachment %s not found for status update", attachment_db_id
+#                 )
+
+#         current_index = state.get("current_attachment_index", 0)
+#         attachments = list(state.get("attachments", []))
+#         attachments[current_index] = {
+#             **attachment_state,
+#             "is_timesheet": classification == "TIMESHEET",
+#             "status": attachment_status.value,
+#         }
+
+#         return {
+#             **state,
+#             "attachments": attachments,
+#             # "scanned_pdf_classification": classification,
+#         }
+
+#     return scannedpdfnode

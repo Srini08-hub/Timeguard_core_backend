@@ -62,9 +62,7 @@ def _load_image_for_llm(image_path: Path) -> tuple[str, bytes]:
         raise FileNotFoundError(f"Image path does not exist: {image_path}")
 
     media_type, _ = mimetypes.guess_type(image_path.name)
-    if media_type is None:
-        media_type = "application/octet-stream"
-    return media_type, image_path.read_bytes()
+    return (media_type or "application/octet-stream", image_path.read_bytes())
 
 
 def _classification_status(is_timesheet: bool) -> AttachmentStatus:
@@ -90,7 +88,8 @@ Base the answer only on the image. If the image is unreadable or lacks enough
 timesheet evidence, classify it as not a timesheet with lower confidence."""
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        # model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         temperature=0,
         api_key=settings.GOOGLE_API_KEY,
     )
@@ -148,6 +147,7 @@ async def imagenode(
                 attachment,
                 status=attachment_status,
             )
+            await db_session.commit()
             logger.info(
                 "Updated attachment %s to status %s",
                 attachment_db_id,

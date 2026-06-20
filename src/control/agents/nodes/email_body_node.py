@@ -182,7 +182,7 @@ async def _update_email_classification_status(
         logger.warning("Email %s not found for classification update", email_id)
         return
 
-    await email_repository.set_status(email, EmailStatus.PROCESSED)
+    await email_repository.set_status(email, EmailStatus.CLASSIFYED)
     if not is_timesheet:
         await email_repository.set_classification_status(
             email,

@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
     ATTACHMENT_STORAGE_DIR: Path = BASE_DIR / "attachments"
     ATTACHMENT_BASE_URL: str = "http://localhost:8000/attachments"
+    LANGSMITH_API_KEY: str
+    LANGSMITH_TRACING: bool = False
+    LANGSMITH_PROJECT: str = "Default"
+    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",

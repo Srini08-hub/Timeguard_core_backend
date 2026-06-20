@@ -45,7 +45,8 @@ Base the answer only on the page image. If the page is unreadable or lacks
 enough timesheet evidence, classify it as not a timesheet with lower confidence."""
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        # model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         temperature=0,
         api_key=settings.GOOGLE_API_KEY,
     )

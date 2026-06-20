@@ -33,13 +33,6 @@ T = TypeVar("T")
 _worker_loop: asyncio.AbstractEventLoop | None = None
 
 
-# def run_async(coro: Coroutine[Any, Any, T]) -> T:
-#     """Run a coroutine on the worker's persistent event loop."""
-#     if _worker_loop is None:
-#         raise RuntimeError("Celery worker event loop is not initialized")
-#     return _worker_loop.run_until_complete(coro)
-
-
 def run_async[T](coro: Coroutine[Any, Any, T]) -> T:
     if _worker_loop is None:
         raise RuntimeError("Celery worker event loop is not initialized")
