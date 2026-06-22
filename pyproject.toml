@@ -24,6 +24,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "langchain-google-genai>=4.2.5",
     "langsmith>=0.8.16",
+    "google-auth-oauthlib>=1.4.0",
 ]
 
 [dependency-groups]
@@ -35,7 +36,12 @@ dev = [
 [tool.ruff]
 line-length = 88
 target-version = "py313"
-
+[tool.ruff.lint.per-file-ignores]
+"src/control/agents/digital_extract_node/prompts.py" = ["E501"]
+"src/control/agents/excel_extract_node/prompts.py" = ["E501"]
+"src/control/agents/extract_email_body_node/prompts.py" = ["E501"]
+"src/control/agents/image_extract_node/prompts.py" = ["E501"]
+"src/control/agents/scanned_pdf_extraction_node/prompts.py" = ["E501"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

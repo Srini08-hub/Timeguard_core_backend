@@ -1,5 +1,7 @@
 import logging
 from enum import StrEnum
+from typing import cast
+from uuid import UUID
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
@@ -13,6 +15,7 @@ from src.control.agents.state import AttachmentState, TimeguardState
 from src.data.models.attachment import AttachmentStatus
 from src.data.models.email import EmailClassificationStatus, EmailStatus
 from src.data.repositories.email_repository import EmailRepository
+from src.data.repositories.timesheet_repository import TimesheetRepository
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +204,80 @@ async def _update_email_classification_status(
     )
 
 
+async def _create_timesheet_records(
+    state: TimeguardState,
+    config: RunnableConfig,
+    *,
+    body_is_timesheet: bool,
+    attachments: list[AttachmentState],
+    should_create_records: bool,
+) -> tuple[
+    UUID | None,
+    list[AttachmentState],
+]:
+    if not should_create_records:
+        return None, attachments
+
+    email_id = state.get("email_id")
+    if email_id is None:
+        logger.warning("Skipping timesheet record creation because email_id is missing")
+        return None, attachments
+
+    body_timesheet_id = state.get("email_body_timesheet_id")
+    updated_attachments: list[AttachmentState] = []
+    attachment_timesheet_count = 0
+    timesheet_repository = TimesheetRepository(get_db_session(config))
+
+    if body_is_timesheet:
+        body_timesheet = await timesheet_repository.create_if_not_exists(
+            email_id=email_id,
+            source_type="body",
+            attachment_id=None,
+            status="pending",
+        )
+        body_timesheet_id = body_timesheet.timesheet_id
+
+    for attachment in attachments:
+        if not _attachment_is_timesheet(attachment):
+            updated_attachments.append(attachment)
+            continue
+
+        attachment_db_id = attachment.get("attachment_db_id")
+        if attachment_db_id is None:
+            logger.warning(
+                "Skipping timesheet attachment record"
+                " because attachment_db_id is missing for file %s",
+                attachment.get("file_name", "<unknown>"),
+            )
+            updated_attachments.append(attachment)
+            continue
+
+        attachment_timesheet = await timesheet_repository.create_if_not_exists(
+            email_id=email_id,
+            source_type="attachment",
+            attachment_id=attachment_db_id,
+            status="pending",
+        )
+        updated_attachments.append(
+            AttachmentState(
+                **{
+                    **attachment,
+                    "timesheet_id": attachment_timesheet.timesheet_id,
+                }
+            )
+        )
+        attachment_timesheet_count += 1
+
+    db_session = get_db_session(config)
+    await db_session.commit()
+    logger.info(
+        "Created or reused %d attachment timesheet record(s) for email %s",
+        attachment_timesheet_count,
+        email_id,
+    )
+    return body_timesheet_id, updated_attachments
+
+
 async def email_body_node(
     state: TimeguardState,
     config: RunnableConfig,
@@ -238,10 +315,23 @@ async def email_body_node(
         config,
         should_mark_email_timesheet,
     )
+    email_body_timesheet_id, updated_attachments = await _create_timesheet_records(
+        state,
+        config,
+        body_is_timesheet=classification == EmailBodyClassification.TIMESHEET,
+        attachments=attachments,
+        should_create_records=should_mark_email_timesheet,
+    )
 
-    return {
+    result = {
         **state,
         "email_body_anchor_hits": anchor_hits,
         "email_body_context": context_snippet,
         "email_body_classification": classification.value,
+        "is_timesheet": should_mark_email_timesheet,
+        "attachments": updated_attachments,
+        "current_attachment_index": 0,
     }
+    if email_body_timesheet_id is not None:
+        result["email_body_timesheet_id"] = email_body_timesheet_id
+    return cast(TimeguardState, result)
