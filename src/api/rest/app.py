@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 
 from src.api.rest.routes.email_routes import router as email_router
+from src.api.rest.routes.timesheet_routes import router as timesheet_router
 from src.core.exceptions import handlers as exception_handlers
 from src.core.services.gmail_poller import GmailPoller
 from src.data.clients import postgress_client
@@ -42,4 +43,5 @@ def get_app() -> FastAPI:
     # setup_cors(app)
     exception_handlers.register_exception_handlers(app)
     app.include_router(email_router)
+    app.include_router(timesheet_router)
     return app

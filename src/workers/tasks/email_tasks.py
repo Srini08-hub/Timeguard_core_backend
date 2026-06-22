@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 from src.config.settings import settings
 from src.control.agents.graph import get_email_graph
@@ -6,6 +7,7 @@ from src.control.agents.graph_config import (
     DB_SESSION_CONFIG_KEY,
     GMAIL_SERVICE_CONFIG_KEY,
 )
+from src.control.agents.state import TimeguardState
 from src.core.services.gmail_service import GmailService
 from src.data.clients import postgress_client
 from src.workers.celery_app import celery_app, run_async
@@ -25,7 +27,7 @@ async def _classify_email_async(gmail_message_id: str) -> dict:
     async with postgress_client.SessionLocal() as db:
         try:
             result = await graph.ainvoke(
-                {"gmail_message_id": gmail_message_id},
+                cast(TimeguardState, {"gmail_message_id": gmail_message_id}),
                 config={
                     "configurable": {
                         DB_SESSION_CONFIG_KEY: db,

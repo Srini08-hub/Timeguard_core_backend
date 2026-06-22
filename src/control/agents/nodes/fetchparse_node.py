@@ -65,6 +65,10 @@ async def fetch_parse_node(
             attachment_ids=[],
             attachments=[],
             error=str(exc),
+            blocks=[],
+            current_excel_block_index=0,
+            results=[],
+            d_blocks=[],
         )
 
     received_at = datetime.fromtimestamp(raw.received_at_ms / 1000, tz=UTC)
@@ -136,7 +140,12 @@ async def fetch_parse_node(
         gmail_message_id=state["gmail_message_id"],
         sender_mail=email.sender_email,
         body=email.body or "",
+        subject=email.subject or "",
         email_id=email.email_id,
         attachment_ids=attachment_ids,
         attachments=attachments_state,
+        blocks=[],
+        current_excel_block_index=0,
+        results=[],
+        d_blocks=[],
     )

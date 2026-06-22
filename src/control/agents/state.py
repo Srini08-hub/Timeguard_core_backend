@@ -1,7 +1,26 @@
-from typing import Literal, NotRequired, TypedDict
+from __future__ import annotations
+
+from typing import Annotated, Literal, NotRequired, TypedDict
 from uuid import UUID
 
+from src.control.agents.digital_extract_node.serialize import SerialisedPdfBlock
+from src.control.agents.excel_extract_node.probe_extract import SerialisedBlock
+
+
 # from sqlalchemy.dialects.postgresql import UUID
+def _merge_results(
+    left: list[BlockResult], right: list[BlockResult]
+) -> list[BlockResult]:
+    return left + right
+
+
+class BlockResult(TypedDict):
+    sheet_name: str
+    block_index: int
+    success: bool
+    extraction: dict | None  # Parsed JSON object if success
+    error: str | None  # error message if not success
+    raw_response_on_failure: str | None
 
 
 class AttachmentState(TypedDict):
@@ -13,6 +32,7 @@ class AttachmentState(TypedDict):
     attachment_url: NotRequired[str]
     attachment_db_id: NotRequired[UUID]
     is_timesheet: NotRequired[bool]
+    timesheet_id: NotRequired[UUID]
     # confidence: NotRequired[float]
     # reasoning: NotRequired[str]
     status: str
@@ -24,16 +44,35 @@ class AttachmentState(TypedDict):
 
 class TimeguardState(TypedDict):
     email_id: NotRequired[UUID]
+    email_body_timesheet_id: NotRequired[UUID]
     gmail_message_id: str
     attachment_ids: NotRequired[list[UUID]]
     sender_mail: NotRequired[str]
     body: NotRequired[str]
+    subject: NotRequired[str]
     attachments: NotRequired[list[AttachmentState]]
     current_attachment_index: NotRequired[int]
     error: NotRequired[str]
     email_body_anchor_hits: NotRequired[list[dict]]
     email_body_context: NotRequired[str]
     email_body_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
+    # email_body_extraction_done: NotRequired[bool]
+    is_timesheet: NotRequired[bool]
+
+    # sheet_name: Optional[str]            # restrict to one sheet, or None for all
+
+    # Excel
+    blocks: list[SerialisedBlock]  # used
+    current_excel_block_index: int  # usedd
+    results: Annotated[list[BlockResult], _merge_results]
+    # block: SerialisedBlock
+
+    d_blocks: list[SerialisedPdfBlock]
+    # results: Annotated[List[BlockResult], _merge_results]
+
+
+# class BlockTaskState(TypedDict):
+#     block: SerialisedBlock
 
 
 class PDFClassifierState(TypedDict):

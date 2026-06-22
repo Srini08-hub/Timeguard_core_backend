@@ -41,3 +41,8 @@ htmlcov/
 Thumbs.db
 attachments/
 src/utils/credential.json
+
+src/llm_trace_debug.py
+# core_backend/llm_traces
+llm_traces/
+results/
