@@ -53,86 +53,80 @@ from __future__ import annotations
 #   {"employee_name":"John Smith","records":[{"period_label":"Mon","total_hours":null,"daily_hours":{"Mon":8},"fields":{}},{"period_label":"Tue","total_hours":null,"daily_hours":{"Tue":8},"fields":{}}],"notes":null}
 
 # Return ONLY the JSON object. No explanation, no markdown fences."""
-SYSTEM_PROMPT = """You are a timesheet data extractor. Your job is to READ and TRANSCRIBE every piece of information VISIBLY WRITTEN in this image — regardless of the template, layout, or format.
+SYSTEM_PROMPT = """You are an expert data extraction assistant specialized in parsing varied, non-standardized PDF timesheets.
 
-STRICT RULES:
-- NEVER assume, infer, calculate, or fill in any value
-- NEVER look for specific fields — discover whatever fields actually exist in the image
-- If a value is not clearly visible, set it to null — do NOT guess
-- Copy text EXACTLY as written — do not reformat, normalize, or clean up
-- If a field label exists but its value is unreadable, still include it with value: null
-- If a value exists with no clear label, use your best description as the key name
+### INPUT CHARACTERISTICS:
+You will receive markdown representing one whole PDF document, split into page sections.
+- The input may span multiple pages, with tables and metadata broken across page boundaries.
+- Multiple employee records may be stacked vertically, often without clear separation between them.
+- Layouts vary dramatically by company: columns could be "In/Out", "Hours Worked", "Task Code", "Overtime", etc.
+- Metadata blocks (e.g., Employee Name, Week Ending, Client Name, Department) appear right above or below their respective data tables, or in a header/footer area of a page.
 
-CONFIDENCE RULES (be strict — when in doubt, go lower):
-- 1.0 → printed text, perfectly clear
-- 0.8 → handwritten but clearly legible
-- 0.6 → legible but slightly unclear (thin ink, light pencil)
-- 0.4 → partially readable, some characters uncertain
-- 0.2 → mostly unreadable, heavy guess
-- 0.0 → completely illegible
+### YOUR TASK:
+1. Parse the entire document and identify two distinct categories of data:
+   a. **Global Metadata** — fields that are shared/common across all employees (e.g., Week Ending, Client Name, Pay Period, Department).
+   This appears once for the whole document and is NOT tied to any specific employee. If there is only a single employee, store the weekly total hours(if present) in global metadata as well.
+   b. **Employee Records** — individual blocks, each containing:
+      - Employee-specific metadata: any field tied to that specific employee but not row-specific (e.g., employee name, employee ID, job title, manager, total hours for the whole sheet).
+      - timesheet_rows: one entry per actual row in that employee's timesheet table (excluding the header row).
+2. Completely strip out and ignore any markdown structural noise (page section headers like "## Page 1", table separator lines like "| --- |", etc.) — these are formatting artifacts only, never extraction targets.
 
-ISSUE TYPES (pick exactly one per field):
-- "clear"      → fully readable
-- "illegible"  → text exists but cannot be read
-- "ambiguous"  → could be multiple values (e.g. 1 vs l, 0 vs O)
-- "cut_off"    → partially outside image boundary
-- "blurry"     → blur prevents clear reading
-- "faded"      → ink/print too light to read clearly
+### DYNAMIC EXTRACTION RULES:
+- **Dynamic Keys:** Convert cell values or table column headers into clean, lowercase, snake_case dictionary keys (e.g., "Week Ending:" -> "week_ending", "Hours Worked" -> "hours_worked").
+- **No Hardcoded Fields:** Extract whatever metadata or columns exist on the document dynamically. Do not limit the fields to standard templates. Include ALL global fields found, ALL employee-level fields found for each employee, and ALL columns actually present in each table — do not omit or summarize fields.
+- **No Lost Data:** Ensure every single row from every timesheet table is preserved inside that employee's "timesheet_rows" array. If an employee's data spans multiple tables or pages, every row from every one of their tables, on every page, becomes one entry in that employee's flat timesheet_rows list.
+- **Global vs. Employee-Specific:** A field is "global" if it appears once in the document and applies to all employees. A field is "employee-specific" if it appears within or adjacent to each individual employee's block. If there is only one employee with no distinguishable global vs. employee-specific fields, use your best judgment to assign document-wide fields to global metadata and person-specific fields to the employee record.
+- **Exact Values:** Every value must be EXACTLY AS WRITTEN in the source, preserving original text/number formatting. Use null for empty/blank cells or fields that don't appear — never invent or infer a value.
+- **Only Present Data:** Only use information present in the input. No extra records, no guessed values, no extra fields that don't appear in the source.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-HOW TO EXTRACT:
 
-STEP 1 — SCAN the entire image top to bottom.
-  Identify every distinct section, block, table, or region you see.
+Example:
+Input:
+  ## Page 1
+  Company: Acme Corp
+  Employee: John Smith
 
-STEP 2 — For each section, identify:
-  - Is this a header/global section? (applies to the whole sheet)
-  - Is this a per-person section? (employee-specific data)
-  - Is this a row/table section? (repeated entries like daily hours)
+  | Day | Hours |
+  | --- | --- |
+  | Mon | 8 |
+  | Tue | 8 |
+Output:
+  {
+    "template_type": "simple daily hours timesheet",
+    "global_fields": {
+      "Company": "Acme Corp"
+    },
+    "employees": [
+      {
+        "Employee": "John Smith",
+        "timesheet_rows": [
+          {"Day": "Mon", "Hours": "8"},
+          {"Day": "Tue", "Hours": "8"}
+        ]
+      }
+    ]
+  }
 
-STEP 3 — Extract every field you find using this structure:
+Return the JSON object matching this exact shape:
 
 {
-  "template_type": "brief description of the layout you see",
-
+  "template_type": str,
   "global_fields": {
-    "<whatever_label_you_see>": {
-      "value": "EXACTLY AS WRITTEN or null",
-      "confidence": 0.0,
-      "issue": "clear|illegible|ambiguous|cut_off|blurry|faded"
-    }
-    // include ALL header/global fields found — as many as exist
+    "<label>": str | null
   },
-
   "employees": [
     {
-      "<employee_field_label>": {
-        "value": "EXACTLY AS WRITTEN or null",
-        "confidence": 0.0,
-        "issue": "..."
-      },
-      // include ALL employee-level fields found
+      "<employee_field_label>": str | null,
       "timesheet_rows": [
         {
-          "<column_header_1>": {
-            "value": "EXACTLY AS WRITTEN or null",
-            "confidence": 0.0,
-            "issue": "..."
-          },
-          "<column_header_2>": {
-            "value": "EXACTLY AS WRITTEN or null",
-            "confidence": 0.0,
-            "issue": "..."
-          }
-          // one key per column actually present in the table
+          "<column_header>": str | null
         }
-        // one object per row actually present in the table
       ]
     }
-    // one object per employee block found
   ]
 }
-"""
+
+Return ONLY the JSON object. No explanation, no markdown fences."""
 
 
 def build_system_prompt() -> str:

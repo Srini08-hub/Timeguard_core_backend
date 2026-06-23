@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
     ATTACHMENT_STORAGE_DIR: Path = BASE_DIR / "attachments"
     ATTACHMENT_BASE_URL: str = "http://localhost:8000/attachments"
+    LLAMA_CLOUD_API_KEY: str
     LANGSMITH_API_KEY: str
     LANGSMITH_TRACING: bool = False
     LANGSMITH_PROJECT: str = "Default"

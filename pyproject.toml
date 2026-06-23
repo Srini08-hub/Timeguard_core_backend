@@ -25,6 +25,7 @@ dependencies = [
     "langchain-google-genai>=4.2.5",
     "langsmith>=0.8.16",
     "google-auth-oauthlib>=1.4.0",
+    "llama-cloud>=1.6.0",
 ]
 
 [dependency-groups]
