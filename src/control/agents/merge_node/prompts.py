@@ -47,7 +47,8 @@ Never drop a row because some of its fields are unrecognized — extract all map
 | check_in      | In, In Time, Clock In, Start Time, Login, Punch In, in_time   |
 | check_out     | Out, Out Time, Clock Out, End Time, Logout, Punch Out, out_time|
 | break_hours   | Break, Lunch, Meal Break, Break Time                           |
-| hours         | Hours, Worked Hours, Regular Hours, Total Hours                |
+| hours         | Hours, Worked Hours, Regular Hours                             |
+| total_hours   | Total Hours, Weekly Hours, Weekly Total                        |
 | overtime_hours| OT, Overtime, OT Hours                                         |
 
 
@@ -89,18 +90,21 @@ Each daily record must follow this structure (include only keys that exist in th
 
 ### Hours Field Routing Rule
 
-Determine whether hours data is **weekly-level** or **daily-level** and route accordingly:
+Determine whether hours data is weekly-level or daily-level and route accordingly:
 
-- **`total_hours`** — Use when the source provides a single aggregated hours value
-  for an employee across the full week (e.g. "maya ross 40 hours", no day breakdown).
-  Strip any non-numeric suffix (e.g. "40 hours" → "40.0"). Set `hours` to null/omit it.
+- **`total_hours`** — Use when EITHER of the following is true:
+  - The field label in the source is `total_hours` or any of its aliases (Total Hours, Weekly Hours, Weekly Total).
+  - The employee has exactly ONE row AND that row contains no `date` or `day` field,
+    regardless of whether the source field was labeled `hours` or `total_hours`.
+    In both sub-cases: set `date` to the `week_ending` value, populate `total_hours`
+    with the numeric-only value, and omit `hours`.
 
-- **`hours`** — Use when the source provides hours per individual day/row
-  (e.g. a row for Monday with "8.5 hours"). Set `total_hours` to null/omit it.
+- **`hours`** — Use only when the source provides hours per individual day/row
+  AND a `date` or `day` field is present on that row. Omit `total_hours`.
 
-Never populate both `hours` and `total_hours` in the same record from the same value.
-If a source provides both a daily breakdown AND a weekly total, populate `hours` on
-each daily row and 'total hours duplicated across all rows'.
+Never populate both `hours` and `total_hours` in the same record.
+If a source provides both a daily breakdown AND a weekly total, populate `hours`
+on each daily row and omit `total_hours`.
 
 ## STEP 5 — CONFIDENCE CALCULATION
 

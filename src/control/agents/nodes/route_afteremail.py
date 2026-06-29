@@ -34,11 +34,10 @@ def route_after_email_body(state: TimeguardState) -> str:
     if index >= len(attachments):
         # All attachments processed, route to email_body_extraction_node if needed
         # , then merge
-        if state.get("email_body_classification") == "TIMESHEET":
-            if state.get("email_body_extracted"):
-                return "merge_node"
-            return "email_body_extraction_node"
-        return "merge_node"
+        # if state.get("email_body_classification") == "TIMESHEET":
+        if state.get("email_body_extracted"):
+            return "merge_node"
+        return "email_body_extraction_node"
 
     attachment = attachments[index]
     is_att_timesheet = (

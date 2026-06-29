@@ -13,10 +13,12 @@ from src.control.agents.graph_config import get_db_session
 from src.control.agents.state import TimeguardState
 from src.data.models.assignments import Assignment
 from src.data.models.client_rules import ClientRule
+from src.data.models.email import EmailStatus
 from src.data.models.exception import ExceptionSeverity, ExceptionType
 from src.data.models.timecard import ExceptionSeverity as TimecardSeverity
 from src.data.models.timecard import TimecardStatus
 from src.data.models.timesheet import TimesheetStatus
+from src.data.repositories.email_repository import EmailRepository
 from src.data.repositories.exception_repository import ExceptionRepository
 from src.data.repositories.timecard_repository import TimecardRepository
 from src.data.repositories.timesheet_repository import TimesheetRepository
@@ -225,11 +227,12 @@ def _validate_employee_record(employee: dict[str, Any]) -> list[ValidationFailur
                     (ExceptionType.HOURS_EXCEED_LIMIT, ExceptionSeverity.HIGH, record)
                 )
 
-    if weekly_total > WEEKLY_HOURS_LIMIT:
+    if weekly_total > WEEKLY_HOURS_LIMIT or (
+        total_hours is not None and total_hours > WEEKLY_HOURS_LIMIT
+    ):
         failures.append(
             (ExceptionType.WEEKLY_HOURS_EXCEED_LIMIT, ExceptionSeverity.HIGH, None)
         )
-
     return failures
 
 
@@ -307,6 +310,7 @@ async def validation_node(
     exception_repository = ExceptionRepository(db_session)
     timecard_repository = TimecardRepository(db_session)
     timesheet_repository = TimesheetRepository(db_session)
+    email_repository = EmailRepository(db_session)
     timesheet = await timesheet_repository.get_by_email_id(email_id=email_id)
     if timesheet is None or not isinstance(timesheet.enriched_payload, dict):
         logger.warning(
@@ -381,6 +385,15 @@ async def validation_node(
         )
 
     timesheet.status = TimesheetStatus.UNDER_REVIEW
+
+    # Update email status to indicate successful validation
+    email = await email_repository.get_by_id(email_id)
+    if email:
+        await email_repository.set_status(email, EmailStatus.PROCESSED)
+        logger.info(
+            "Email %s status updated to PROCESSED    after successful validation", email_id
+        )
+
     await db_session.commit()
     logger.info("Validation completed for email %s", email_id)
     return state

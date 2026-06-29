@@ -23,7 +23,7 @@ class EmailStatus(StrEnum):
     # PROCESSING = "processing"
     EXTRACTED = "extracted"
     MERGED = "merged"
-    # PROCESSED = "processed"
+    PROCESSED = "processed"
 
     # NOT_PROCESSED = "not_processed"
     FAILED = "failed"

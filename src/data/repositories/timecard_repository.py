@@ -76,6 +76,7 @@ class TimecardRepository:
             )
             self._session.add(timecard)
             await self._session.flush()
+            await self._session.refresh(timecard)
             return timecard
         except SQLAlchemyError as e:
             raise DatabaseException(f"Failed to create timecard: {str(e)}") from e
@@ -123,6 +124,7 @@ class TimecardRepository:
             timecard.status = TimecardStatus.CLEAN
             timecard.severity = TimecardSeverity.NONE
             await self._session.flush()
+            await self._session.refresh(timecard)
             return timecard
         except SQLAlchemyError as e:
             raise DatabaseException(f"Failed to resolve timecard: {str(e)}") from e
