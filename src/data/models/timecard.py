@@ -10,7 +10,6 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    UniqueConstraint,
     func,
 )
 from sqlalchemy import Enum as SQLEnum
@@ -39,14 +38,14 @@ class ExceptionSeverity(StrEnum):
 class Timecard(Base):
     __tablename__ = "timecards"
 
-    __table_args__ = (
-        UniqueConstraint(
-            "emp_id",
-            "assignment_id",
-            "week_ending",
-            name="uq_timecard_employee_week",
-        ),
-    )
+    # __table_args__ = (
+    #     UniqueConstraint(
+    #         "emp_id",
+    #         "assignment_id",
+    #         "week_ending",
+    #         name="uq_timecard_employee_week",
+    #     ),
+    # )
 
     timecard_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),

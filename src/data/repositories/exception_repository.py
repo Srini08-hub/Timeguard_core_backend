@@ -38,6 +38,8 @@ class ExceptionRepository:
 
         self._session.add_all(exceptions)
         await self._session.flush()
+        for exception in exceptions:
+            await self._session.refresh(exception)
         return exceptions
 
     async def resolve_exceptions(
@@ -49,3 +51,4 @@ class ExceptionRepository:
             exception.resolved = True
             exception.resolved_at = resolved_at
         await self._session.flush()
+        await self._session.refresh(exception)
