@@ -23,6 +23,7 @@ repos:
         language: system
         types: [python]
 
+
       - id: ruff-format
         name: ruff-format
         entry: uv run ruff format

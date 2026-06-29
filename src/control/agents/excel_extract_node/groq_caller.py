@@ -19,7 +19,9 @@ from langchain_groq import ChatGroq
 
 from src.config.settings import settings
 
-MODEL_NAME = "llama-3.3-70b-versatile"
+# MODEL_NAME = "llama-3.3-70b-versatile"
+# MODEL_NAME="qwen/qwen3-32b"
+MODEL_NAME = "openai/gpt-oss-120b"
 LLM_PAYLOAD_LOG = Path("results") / "llm_payloads.jsonl"
 
 _client = None
@@ -69,8 +71,7 @@ def _write_llm_payload(messages: list[dict], system: str) -> None:
         "model": MODEL_NAME,
         "system": system,
         "messages": messages,
-        "total_content_chars": len(system)
-        + sum(len(m.get("content", "")) for m in messages),
+        "total_content_chars": len(system) + sum(len(m.get("content", "")) for m in messages),
     }
 
     LLM_PAYLOAD_LOG.parent.mkdir(parents=True, exist_ok=True)

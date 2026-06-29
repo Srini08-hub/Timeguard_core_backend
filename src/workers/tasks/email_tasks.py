@@ -22,7 +22,7 @@ async def _classify_email_async(gmail_message_id: str) -> dict:
         raise RuntimeError("Database session factory is not initialized")
 
     gmail_service = GmailService()
-    graph = get_email_graph()
+    graph = await get_email_graph()
 
     async with postgress_client.SessionLocal() as db:
         try:
@@ -32,12 +32,13 @@ async def _classify_email_async(gmail_message_id: str) -> dict:
                     "configurable": {
                         DB_SESSION_CONFIG_KEY: db,
                         GMAIL_SERVICE_CONFIG_KEY: gmail_service,
+                        "thread_id": gmail_message_id,
                     }
                 },
             )
             # await db.commit()
         except Exception:
-            await db.rollback()
+            # await db.rollback()
             raise
 
     return {

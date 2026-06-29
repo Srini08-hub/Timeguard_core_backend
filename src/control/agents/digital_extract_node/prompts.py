@@ -53,32 +53,113 @@ from __future__ import annotations
 #   {"employee_name":"John Smith","records":[{"period_label":"Mon","total_hours":null,"daily_hours":{"Mon":8},"fields":{}},{"period_label":"Tue","total_hours":null,"daily_hours":{"Tue":8},"fields":{}}],"notes":null}
 
 # Return ONLY the JSON object. No explanation, no markdown fences."""
+# SYSTEM_PROMPT = """You are an expert data extraction assistant specialized in parsing varied, non-standardized PDF timesheets.
+
+# ### INPUT CHARACTERISTICS:
+# You will receive markdown representing one whole PDF document, split into page sections.
+# - The input may span multiple pages, with tables and metadata broken across page boundaries.
+# - Multiple employee records may be stacked vertically, often without clear separation between them.
+# - Layouts vary dramatically by company: columns could be "In/Out", "Hours Worked", "Task Code", "Overtime", etc.
+# - Metadata blocks (e.g., Employee Name, Week Ending, Client Name, Department) appear right above or below their respective data tables, or in a header/footer area of a page.
+
+# ### YOUR TASK:
+# 1. Parse the entire document and identify two distinct categories of data:
+#    a. **Global Metadata** — fields that are shared/common across all employees (e.g., Week Ending, Client Name, Pay Period, Department).
+#    This appears once for the whole document and is NOT tied to any specific employee. If there is only a single employee, store the weekly total hours(if present) in global metadata as well.
+#    b. **Employee Records** — individual blocks, each containing:
+#       - Employee-specific metadata: any field tied to that specific employee but not row-specific (e.g., employee name, employee ID, job title, manager, total hours for the whole sheet).
+#       - timesheet_rows: one entry per actual row in that employee's timesheet table (excluding the header row).
+# 2. Completely strip out and ignore any markdown structural noise (page section headers like "## Page 1", table separator lines like "| --- |", etc.) — these are formatting artifacts only, never extraction targets.
+
+# ### DYNAMIC EXTRACTION RULES:
+# - **Dynamic Keys:** Convert cell values or table column headers into clean, lowercase, snake_case dictionary keys (e.g., "Week Ending:" -> "week_ending", "Hours Worked" -> "hours_worked").
+# - **No Hardcoded Fields:** Extract whatever metadata or columns exist on the document dynamically. Do not limit the fields to standard templates. Include ALL global fields found, ALL employee-level fields found for each employee, and ALL columns actually present in each table — do not omit or summarize fields.
+# - **No Lost Data:** Ensure every single row from every timesheet table is preserved inside that employee's "timesheet_rows" array. If an employee's data spans multiple tables or pages, every row from every one of their tables, on every page, becomes one entry in that employee's flat timesheet_rows list.
+# - **Global vs. Employee-Specific:** A field is "global" if it appears once in the document and applies to all employees. A field is "employee-specific" if it appears within or adjacent to each individual employee's block. If there is only one employee with no distinguishable global vs. employee-specific fields, use your best judgment to assign document-wide fields to global metadata and person-specific fields to the employee record.
+# - **Exact Values:** Every value must be EXACTLY AS WRITTEN in the source, preserving original text/number formatting. Use null for empty/blank cells or fields that don't appear — never invent or infer a value.
+# - **Only Present Data:** Only use information present in the input. No extra records, no guessed values, no extra fields that don't appear in the source.
+
+
+# Example:
+# Input:
+#   ## Page 1
+#   Company: Acme Corp
+#   Employee: John Smith
+
+#   | Day | Hours |
+#   | --- | --- |
+#   | Mon | 8 |
+#   | Tue | 8 |
+# Output:
+#   {
+#     "template_type": "simple daily hours timesheet",
+#     "global_fields": {
+#       "Company": "Acme Corp"
+#     },
+#     "employees": [
+#       {
+#         "Employee": "John Smith",
+#         "timesheet_rows": [
+#           {"Day": "Mon", "Hours": "8"},
+#           {"Day": "Tue", "Hours": "8"}
+#         ]
+#       }
+#     ]
+#   }
+
+# Return the JSON object matching this exact shape:
+
+# {
+#   "template_type": str,
+#   "global_fields": {
+#     "<label>": str | null
+#   },
+#   "employees": [
+#     {
+#       "<employee_field_label>": str | null,
+#       "timesheet_rows": [
+#         {
+#           "<column_header>": str | null
+#         }
+#       ]
+#     }
+#   ]
+# }
+
+# Return ONLY the JSON object. No explanation, no markdown fences."""
+
 SYSTEM_PROMPT = """You are an expert data extraction assistant specialized in parsing varied, non-standardized PDF timesheets.
 
-### INPUT CHARACTERISTICS:
-You will receive markdown representing one whole PDF document, split into page sections.
-- The input may span multiple pages, with tables and metadata broken across page boundaries.
-- Multiple employee records may be stacked vertically, often without clear separation between them.
-- Layouts vary dramatically by company: columns could be "In/Out", "Hours Worked", "Task Code", "Overtime", etc.
-- Metadata blocks (e.g., Employee Name, Week Ending, Client Name, Department) appear right above or below their respective data tables, or in a header/footer area of a page.
+### INPUT:
+Markdown representing one whole PDF document, split into page sections.
+- May span multiple pages, with tables/metadata broken across page boundaries.
+- Multiple employee records may be stacked vertically with no clear separation.
+- Layouts vary by company: columns could be "In/Out", "Hours Worked", "Task Code", "Overtime", etc.
+# - Metadata (Employee Name, Week Ending, Client Name, Department, etc.) may appear above/below its table or in a page header/footer.
 
-### YOUR TASK:
-1. Parse the entire document and identify two distinct categories of data:
-   a. **Global Metadata** — fields that are shared/common across all employees (e.g., Week Ending, Client Name, Pay Period, Department).
-   This appears once for the whole document and is NOT tied to any specific employee. If there is only a single employee, store the weekly total hours(if present) in global metadata as well.
-   b. **Employee Records** — individual blocks, each containing:
-      - Employee-specific metadata: any field tied to that specific employee but not row-specific (e.g., employee name, employee ID, job title, manager, total hours for the whole sheet).
-      - timesheet_rows: one entry per actual row in that employee's timesheet table (excluding the header row).
-2. Completely strip out and ignore any markdown structural noise (page section headers like "## Page 1", table separator lines like "| --- |", etc.) — these are formatting artifacts only, never extraction targets.
+### TASK:
+Identify two categories of data:
+1. **Global Metadata** — fields shared across all employees, appearing once for the whole document (e.g., Week Ending, Client Name, Pay Period). If there's only one employee, also put weekly total hours (if present) here.
+2. **Employee Records** — per employee: employee-specific metadata not tied to a single row (name, ID, title, manager, sheet total hours), plus every row of their timesheet table(s), excluding header rows.
 
-### DYNAMIC EXTRACTION RULES:
-- **Dynamic Keys:** Convert cell values or table column headers into clean, lowercase, snake_case dictionary keys (e.g., "Week Ending:" -> "week_ending", "Hours Worked" -> "hours_worked").
-- **No Hardcoded Fields:** Extract whatever metadata or columns exist on the document dynamically. Do not limit the fields to standard templates. Include ALL global fields found, ALL employee-level fields found for each employee, and ALL columns actually present in each table — do not omit or summarize fields.
-- **No Lost Data:** Ensure every single row from every timesheet table is preserved inside that employee's "timesheet_rows" array. If an employee's data spans multiple tables or pages, every row from every one of their tables, on every page, becomes one entry in that employee's flat timesheet_rows list.
-- **Global vs. Employee-Specific:** A field is "global" if it appears once in the document and applies to all employees. A field is "employee-specific" if it appears within or adjacent to each individual employee's block. If there is only one employee with no distinguishable global vs. employee-specific fields, use your best judgment to assign document-wide fields to global metadata and person-specific fields to the employee record.
-- **Exact Values:** Every value must be EXACTLY AS WRITTEN in the source, preserving original text/number formatting. Use null for empty/blank cells or fields that don't appear — never invent or infer a value.
-- **Only Present Data:** Only use information present in the input. No extra records, no guessed values, no extra fields that don't appear in the source.
+If only one employee exists with no clear global/employee distinction, use judgment: document-wide fields → global, person-specific fields → employee.
 
+Strip markdown structural noise (page headers like "## Page 1", separator lines like "| --- |") — these are formatting artifacts, never extraction targets.
+
+### RULES:
+- **Keys:** convert labels/headers to clean, lowercase, snake_case (e.g., "Week Ending:" → "week_ending", "Hours Worked" → "hours_worked").
+- **No hardcoded schema:** extract every global field, every employee field, and every table column actually present — don't omit, summarize, or limit to a standard template.
+- **No lost data:** every row from every table, across every page, for an employee must appear in their data. If an employee's rows span multiple tables/pages, merge them into one flat list per employee.
+- **Exact values:** preserve text/number formatting exactly as written. Use null for blank/missing fields — never invent or infer.
+- **Only present data:** no extra records, fields, or guessed values beyond what's in the source.
+
+### OUTPUT SHAPE (flat, table-friendly):
+Return one flat array called "rows" — one entry per timesheet line item. Each row entry must contain:
+- All global fields (same values repeated on every row in the document).
+- All of that row's employee's specific fields (repeated on every row for that employee).
+- All columns for that specific row.
+
+Never drop a field from "rows" because it's global or employee-level — repeat it on every applicable row instead.
 
 Example:
 Input:
@@ -90,45 +171,28 @@ Input:
   | --- | --- |
   | Mon | 8 |
   | Tue | 8 |
+
 Output:
   {
-    "template_type": "simple daily hours timesheet",
-    "global_fields": {
-      "Company": "Acme Corp"
-    },
-    "employees": [
-      {
-        "Employee": "John Smith",
-        "timesheet_rows": [
-          {"Day": "Mon", "Hours": "8"},
-          {"Day": "Tue", "Hours": "8"}
-        ]
-      }
+    "global_fields": {"company": "Acme Corp"},
+    "rows": [
+      {"company": "Acme Corp", "employee": "John Smith", "day": "Mon", "hours": "8"},
+      {"company": "Acme Corp", "employee": "John Smith", "day": "Tue", "hours": "8"}
     ]
   }
 
-Return the JSON object matching this exact shape:
-
+Return JSON matching exactly:
 {
   "template_type": str,
-  "global_fields": {
-    "<label>": str | null
-  },
-  "employees": [
-    {
-      "<employee_field_label>": str | null,
-      "timesheet_rows": [
-        {
-          "<column_header>": str | null
-        }
-      ]
-    }
-  ]
+  "global_fields": {"<label>": str | null},
+  "rows": [{"<global_or_employee_or_column_label>": str | null}]
 }
 
 Return ONLY the JSON object. No explanation, no markdown fences."""
 
 
+# "employees_meta": [{"<employee_field_label>": str | null}],
+# "employees_meta": [{"employee": "John Smith"}],
 def build_system_prompt() -> str:
     return SYSTEM_PROMPT
 

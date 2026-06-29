@@ -1,7 +1,7 @@
-from src.control.agents.state import ExcelClassifierState
+from src.control.agents.state import TimeguardState
 
 
-def route_sheet_has_content(state: ExcelClassifierState) -> str:
+def route_sheet_has_content(state: TimeguardState) -> str:
     """
     Mirrors route_page_has_content from the PDF subgraph.
     Called after next_sheet — handles both exit conditions:
@@ -9,9 +9,9 @@ def route_sheet_has_content(state: ExcelClassifierState) -> str:
       - hidden or empty sheet              → skip, loop to next_sheet
       - has content                        → proceed to fuzzy match
     """
-    sheet = state["current_sheet"]
+    sheet = state["excel_current_sheet"]
 
-    # Queue exhausted — next_sheet set current_sheet to None
+    # Queue exhausted — next_sheet set excel_current_sheet to None
     if sheet is None:
         return "done"  # handled below via call_llm route
 
@@ -24,16 +24,16 @@ def route_sheet_has_content(state: ExcelClassifierState) -> str:
     return "fuzzy_match_anchors"
 
 
-def route_anchor_found(state: ExcelClassifierState) -> str:
-    return "harvest_context" if state["anchor_hits"] else "next_sheet"
+def route_anchor_found(state: TimeguardState) -> str:
+    return "harvest_context" if state["excel_anchor_hits"] else "next_sheet"
 
 
-def route_after_llm(state: ExcelClassifierState) -> str:
+def route_after_llm(state: TimeguardState) -> str:
     print("STATE:", state)
     print("CLASSIFICATION:", state["excel_classification"])
     if state["excel_classification"] == "TIMESHEET":
         return "done"
-    elif state["sheet_queue"]:
+    elif state["excel_sheet_queue"]:
         return "next_sheet"
     else:
         return "done"

@@ -15,6 +15,7 @@ from langchain_core.runnables import RunnableConfig
 from src.control.agents.graph_config import get_db_session, get_gmail_service
 from src.control.agents.state import AttachmentState, TimeguardState
 from src.data.models.attachment import AttachmentStatus
+from src.data.models.email import EmailStatus
 from src.data.repositories.attachment_repository import AttachmentRepository
 from src.data.repositories.email_repository import EmailRepository
 from src.utils.storage import save_attachment
@@ -51,17 +52,16 @@ async def fetch_parse_node(
             "Failed to fetch Gmail message %s",
             state["gmail_message_id"],
         )
-        email = await email_repo.create_failed_fetch(
-            gmail_message_id=state["gmail_message_id"],
-            failure_stage="fetch_email",
-            failure_reason=str(exc),
-            received_at=datetime.now(UTC),
-        )
-        await db_session.commit()
+        # email = await email_repo.create_failed_fetch(
+        #     gmail_message_id=state["gmail_message_id"],
+        #     failure_stage="fetch_email",
+        #     failure_reason=str(exc),
+        #     received_at=datetime.now(UTC),
+        # )
+        # await db_session.commit()
 
         return TimeguardState(
             gmail_message_id=state["gmail_message_id"],
-            email_id=email.email_id,
             attachment_ids=[],
             attachments=[],
             error=str(exc),
@@ -122,9 +122,15 @@ async def fetch_parse_node(
                 )
             except Exception as exc:
                 logger.exception("Failed to download %s", raw_att.filename)
-                await attachment_repo.set_failed(
-                    attachment,
-                    failure_stage="download",
+                # await attachment_repo.set_failed(
+                #     attachment,
+                #     failure_stage="download",
+                #     failure_reason=str(exc),
+                # )
+                await email_repo.set_status(
+                    email,
+                    EmailStatus.FAILED,
+                    failure_stage="attachment_download",
                     failure_reason=str(exc),
                 )
                 await db_session.commit()

@@ -1,6 +1,6 @@
 from rapidfuzz import fuzz
 
-from src.control.agents.state import ExcelClassifierState
+from src.control.agents.state import TimeguardState
 
 ANCHOR_KEYWORDS = [
     "timesheet",
@@ -15,7 +15,8 @@ ANCHOR_KEYWORDS = [
     "pay period",
     "time in",
     "time out",
-    "billable hours",
+    "In",
+    "Outbillable hours",
     "clock in",
     "clock out",
     "attendance",
@@ -31,6 +32,8 @@ ANCHOR_KEYWORDS = [
     "project code",
     "approved",
     "supervisor",
+    "Day",
+    "Date",
 ]
 FUZZY_THRESHOLD = 88
 # WINDOW_SIZE     = 60
@@ -62,8 +65,8 @@ def find_keyword_position(
     return False, 0.0, -1
 
 
-def fuzzy_match_anchors(state: ExcelClassifierState) -> ExcelClassifierState:
-    sheet = state.get("current_sheet")
+def fuzzy_match_anchors(state: TimeguardState) -> TimeguardState:
+    sheet = state.get("excel_current_sheet")
     text = sheet.get("combined", "") if sheet else ""
     hits = []
 
@@ -79,5 +82,5 @@ def fuzzy_match_anchors(state: ExcelClassifierState) -> ExcelClassifierState:
 
     return {
         **state,
-        "anchor_hits": hits,
+        "excel_anchor_hits": hits,
     }

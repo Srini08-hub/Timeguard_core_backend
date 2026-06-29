@@ -1,25 +1,9 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from src.data.models.email import EmailStatus
-
-# class AttachmentInfo(BaseModel):
-#     attachment_id: str
-#     filename: str
-#     mime_type: str
-#     size: int | None = None
-
-
-# class EmailContent(BaseModel):
-#     message_id: str
-#     thread_id: str
-#     subject: str
-#     sender_name: str | None = None
-#     sender_email: str
-#     received_at: str | None = None
-#     body: str
-#     attachments: list[AttachmentInfo]
 
 
 class TimesheetEmailResponse(BaseModel):
@@ -28,3 +12,6 @@ class TimesheetEmailResponse(BaseModel):
     subject: str | None = None
     body: str | None = None
     status: EmailStatus
+    failure_stage: str | None = None
+    failure_reason: str | None = None
+    received_at: datetime

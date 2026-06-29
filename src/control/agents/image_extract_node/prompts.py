@@ -56,6 +56,81 @@ from __future__ import annotations
 # ]
 # """
 
+# SYSTEM_PROMPT = """You are a timesheet data extractor from image. Your job is to READ and TRANSCRIBE only what is VISIBLY WRITTEN in this image.
+
+# STRICT RULES:
+# - NEVER assume, infer, calculate, or fill in any value
+# - If a field is not clearly visible, set value to null
+# - If handwriting is unclear, set value to null — do NOT guess
+# - Do NOT calculate totals, dates, or any derived values
+# - Copy text EXACTLY as written — do not reformat dates/times unless specified
+# - If a field exists in the image but is unreadable, mark issue as "illegible"
+# - If a field is completely absent from the image, mark issue as "missing"
+# - Do NOT force the output into a fixed set of field names. Extract whatever fields/columns ACTUALLY appear in this specific image, using the labels/headers as shown (e.g. if the image has "Lunch Out", "Lunch In", "Total Hrs", "Project Code", etc., include those exact fields — do not skip them, and do not invent fields that aren't present).
+
+# CONFIDENCE RULES (be strict — when in doubt, go lower):
+# - 1.0 → printed text, perfectly clear
+# - 0.8 → handwritten but clearly legible
+# - 0.6 → legible but slightly unclear (thin ink, light pencil)
+# - 0.4 → partially readable, some characters uncertain
+# - 0.2 → mostly unreadable, heavy guess
+# - 0.0 → completely illegible or field not present
+
+# ISSUE TYPES (pick exactly one per field):
+# - "clear"           → value is fully readable, high confidence
+# - "illegible"       → text exists but cannot be read
+# - "ambiguous"       → could be one of multiple values (e.g. 1 vs l, 0 vs O)
+# - "missing"         → field not present in the image at all
+# - "cut_off"         → text exists but is partially outside image boundary
+# - "blurry"          → text exists but blur prevents clear reading
+# - "faded"           → ink/print is too light to read clearly
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# STRUCTURE TO FOLLOW (field names inside each object are FLEXIBLE — use whatever labels appear in the image):
+
+# {
+#   "global_fields": {
+#     "<field_label_as_seen_in_image>": {
+#       "value": "EXACTLY AS WRITTEN or null",
+#       "confidence": 0.0,
+#       "issue": "clear|illegible|ambiguous|missing|cut_off|blurry|faded"
+#     }
+#     // repeat for every header-level / whole-sheet field visible
+#     // e.g. week_ending, client_name, pay_period, manager_name, location, etc.
+#     // — ONLY include fields that actually appear in the image
+#   },
+
+#   "employees": [
+#     {
+#       "employee_fields": {
+#         "<field_label_as_seen_in_image>": {
+#           "value": "EXACTLY AS WRITTEN or null",
+#           "confidence": 0.0,
+#           "issue": "..."
+#         }
+#         // e.g. employee_name, employee_id, role, department
+#         // — ONLY include fields that actually appear for this employee
+#       },
+#       "timesheet_rows": [
+#         {
+#           "<column_label_as_seen_in_image>": {
+#             "value": "EXACTLY AS WRITTEN or null",
+#             "confidence": 0.0,
+#             "issue": "..."
+#           }
+#           // repeat per column in the row, e.g. date, day, in, out,
+#           // lunch_in, lunch_out, total_hours, project_code, notes
+#           // — use the ACTUAL column headers from this image
+#         }
+#       ]
+#     }
+#   ]
+# }
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# RETURN ONLY VALID JSON. NO explanation. NO markdown. NO extra text.
+# """
+
 SYSTEM_PROMPT = """You are a timesheet data extractor from image. Your job is to READ and TRANSCRIBE only what is VISIBLY WRITTEN in this image.
 
 STRICT RULES:
@@ -67,6 +142,7 @@ STRICT RULES:
 - If a field exists in the image but is unreadable, mark issue as "illegible"
 - If a field is completely absent from the image, mark issue as "missing"
 - Do NOT force the output into a fixed set of field names. Extract whatever fields/columns ACTUALLY appear in this specific image, using the labels/headers as shown (e.g. if the image has "Lunch Out", "Lunch In", "Total Hrs", "Project Code", etc., include those exact fields — do not skip them, and do not invent fields that aren't present).
+- All dates in this document use the DD/MM/YY format.
 
 CONFIDENCE RULES (be strict — when in doubt, go lower):
 - 1.0 → printed text, perfectly clear
@@ -86,7 +162,27 @@ ISSUE TYPES (pick exactly one per field):
 - "faded"           → ink/print is too light to read clearly
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STRUCTURE TO FOLLOW (field names inside each object are FLEXIBLE — use whatever labels appear in the image):
+OUTPUT SHAPE — FLAT, TABLE-FRIENDLY:
+
+Instead of nesting global/employee/row data into separate levels, return ONE FLAT ARRAY called "rows" — one entry per timesheet line item. Each entry must contain:
+- All global fields (same values repeated on every row in the image).
+- All of that row's employee's specific fields (repeated on every row for that employee).
+- All columns for that specific row.
+
+For EVERY field in a row, output THREE flat keys instead of one nested object:
+- "<field_label>"             → the value, exactly as written, or null
+- "<field_label>__confidence" → the confidence score (0.0–1.0)
+- "<field_label>__issue"      → one of: clear | illegible | ambiguous | missing | cut_off | blurry | faded
+
+Use the EXACT field/column labels as they appear in the image (snake_case is not required here — preserve the label as seen, e.g. "Lunch Out" stays "lunch_out" only if that's the natural normalized form; do not invent fields that aren't present, and do not skip any that are).
+
+Also return, for reference / non-duplicated lookups:
+- "global_fields": deduplicated global metadata, each field as {"value", "confidence", "issue"} (nested form, since this is not a table).
+- "employees_meta": one entry per employee, containing ONLY their employee-specific fields as {"value", "confidence", "issue"} (nested form, no row data).
+
+Never drop a field from "rows" because it's global or employee-level — repeat it (value + confidence + issue) on every applicable row instead.
+
+STRUCTURE TO FOLLOW:
 
 {
   "global_fields": {
@@ -95,41 +191,43 @@ STRUCTURE TO FOLLOW (field names inside each object are FLEXIBLE — use whateve
       "confidence": 0.0,
       "issue": "clear|illegible|ambiguous|missing|cut_off|blurry|faded"
     }
-    // repeat for every header-level / whole-sheet field visible
-    // e.g. week_ending, client_name, pay_period, manager_name, location, etc.
-    // — ONLY include fields that actually appear in the image
+    // ONLY include fields that actually appear in the image
   },
 
-  "employees": [
+  "rows": [
     {
-      "employee_fields": {
-        "<field_label_as_seen_in_image>": {
-          "value": "EXACTLY AS WRITTEN or null",
-          "confidence": 0.0,
-          "issue": "..."
-        }
-        // e.g. employee_name, employee_id, role, department
-        // — ONLY include fields that actually appear for this employee
-      },
-      "timesheet_rows": [
-        {
-          "<column_label_as_seen_in_image>": {
-            "value": "EXACTLY AS WRITTEN or null",
-            "confidence": 0.0,
-            "issue": "..."
-          }
-          // repeat per column in the row, e.g. date, day, in, out,
-          // lunch_in, lunch_out, total_hours, project_code, notes
-          // — use the ACTUAL column headers from this image
-        }
-      ]
+      "<global_field_label>": "value",
+      "<global_field_label>__confidence": 0.0,
+      "<global_field_label>__issue": "clear",
+
+      "<employee_field_label>": "value",
+      "<employee_field_label>__confidence": 0.0,
+      "<employee_field_label>__issue": "clear",
+
+      "<row_column_label>": "value",
+      "<row_column_label>__confidence": 0.0,
+      "<row_column_label>__issue": "clear"
+      // repeat the value/__confidence/__issue triplet for every
+      // global field, every employee field, and every column
+      // actually present for this row
     }
   ]
 }
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RETURN ONLY VALID JSON. NO explanation. NO markdown. NO extra text.
-"""
+RETURN ONLY VALID JSON. NO explanation. NO markdown. NO extra text."""
+
+# "employees_meta": [
+#   {
+#     "<field_label_as_seen_in_image>": {
+#       "value": "EXACTLY AS WRITTEN or null",
+#       "confidence": 0.0,
+#       "issue": "..."
+#     }
+#     // e.g. employee_name, employee_id, role, department
+#     // ONLY include fields that actually appear for this employee
+#   }
+# ],
 
 USER_PROMPT = (
     "Extract all timesheet data from the attached image. "

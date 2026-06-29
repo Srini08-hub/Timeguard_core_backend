@@ -12,14 +12,19 @@ from src.data.models.base import Base
 
 if TYPE_CHECKING:
     from src.data.models.attachment import Attachment
+    from src.data.models.content_extract import ContentExtract
     from src.data.models.timesheet import Timesheet
 
 
 class EmailStatus(StrEnum):
-    NOT_RECEIVED = "not_received"
+    # NOT_RECEIVED = "not_received"
     RECEIVED = "received"
     CLASSIFYED = "classified"
-    PROCESSED = "processed"
+    # PROCESSING = "processing"
+    EXTRACTED = "extracted"
+    MERGED = "merged"
+    # PROCESSED = "processed"
+
     # NOT_PROCESSED = "not_processed"
     FAILED = "failed"
 
@@ -116,9 +121,14 @@ class Email(Base):
         back_populates="email",
         cascade="all, delete-orphan",
     )
-
-    timesheets: Mapped[list["Timesheet"]] = relationship(
+    content_extracts: Mapped[list["ContentExtract"]] = relationship(
+        "ContentExtract",
+        back_populates="email",
+        cascade="all, delete-orphan",
+    )
+    timesheet: Mapped["Timesheet | None"] = relationship(
         "Timesheet",
         back_populates="email",
+        uselist=False,
         cascade="all, delete-orphan",
     )

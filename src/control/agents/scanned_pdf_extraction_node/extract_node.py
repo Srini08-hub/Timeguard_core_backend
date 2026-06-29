@@ -24,7 +24,10 @@ from src.control.agents.scanned_pdf_extraction_node.prompts import (
     build_system_prompt,
 )
 from src.control.agents.state import AttachmentState, TimeguardState
-from src.data.repositories.timesheet_repository import TimesheetRepository
+from src.data.models.email import EmailStatus
+from src.data.repositories.attachment_repository import AttachmentRepository
+from src.data.repositories.content_extract_repository import ContentExtractRepository
+from src.data.repositories.email_repository import EmailRepository
 from src.llm_trace_debug import store_llm_result_for_testing
 
 logging.basicConfig(level=logging.INFO)
@@ -59,7 +62,7 @@ def _resolve_attachment_path(attachment: AttachmentState) -> Path:
     )
 
 
-async def _store_timesheet_payload(
+async def _store_content_extract_payload(
     state: TimeguardState,
     config: RunnableConfig,
     payload: dict[str, Any] | list[Any] | None,
@@ -69,32 +72,89 @@ async def _store_timesheet_payload(
 
     if index >= len(attachments):
         logger.warning(
-            "Skipping scanned PDF timesheet payload save because attachment "
+            "Skipping scanned PDF content extract payload save because attachment "
             "index is out of range"
         )
         return
 
     attachment = attachments[index]
-    timesheet_id = attachment.get("timesheet_id")
-    if timesheet_id is None:
+    content_extract_id = attachment.get("content_extract_id")
+    if content_extract_id is None:
         logger.warning(
-            "Skipping scanned PDF timesheet payload save because timesheet_id "
+            "Skipping scanned PDF content extract payload save"
+            "because content_extract_id "
             "is missing for attachment %s",
             attachment.get("file_name", "<unknown>"),
         )
         return
 
     db_session = get_db_session(config)
-    timesheet_repository = TimesheetRepository(db_session)
-    timesheet = await timesheet_repository.set_extracted_payload(
-        timesheet_id=timesheet_id,
+    content_extract_repository = ContentExtractRepository(db_session)
+    content_extract = await content_extract_repository.set_extracted_payload(
+        content_extract_id=content_extract_id,
         extracted_payload={"extraction": payload},
     )
-    if timesheet is None:
+    if content_extract is None:
         return
 
     await db_session.commit()
-    logger.info("Stored scanned PDF extraction payload for timesheet %s", timesheet_id)
+    logger.info(
+        "Stored scanned PDF extraction payload for content_extract %s", content_extract_id
+    )
+
+
+async def _mark_scanned_pdf_extraction_failed(
+    state: TimeguardState,
+    config: RunnableConfig,
+    failure_reason: str,
+) -> None:
+    db_session = get_db_session(config)
+    email_repository = EmailRepository(db_session)
+    attachment_repository = AttachmentRepository(db_session)
+
+    email_id = state.get("email_id")
+    if email_id:
+        email = await email_repository.get_by_id(email_id)
+        if email is not None:
+            await email_repository.set_status(
+                email,
+                EmailStatus.FAILED,
+                failure_stage="scanned_pdf_extraction",
+                failure_reason=failure_reason,
+            )
+            logger.info(
+                "Set email %s status to FAILED due to scanned PDF extraction error",
+                email_id,
+            )
+        else:
+            logger.warning(
+                "Email %s not found for scanned PDF extraction failure update", email_id
+            )
+
+    attachments = state.get("attachments", [])
+    index = state.get("current_attachment_index", 0)
+    if index < len(attachments):
+        attachment_state = attachments[index]
+        attachment_db_id = attachment_state.get("attachment_db_id")
+        if attachment_db_id:
+            attachment = await attachment_repository.get_by_id(attachment_db_id)
+            if attachment is not None:
+                await attachment_repository.set_failed(
+                    attachment,
+                    failure_stage="scanned_pdf_extraction",
+                    failure_reason=failure_reason,
+                )
+                logger.info(
+                    "Set attachment %s status to FAILED due to scanned PDF extraction error",
+                    attachment_db_id,
+                )
+            else:
+                logger.warning(
+                    "Attachment %s not found for scanned PDF extraction failure update",
+                    attachment_db_id,
+                )
+
+    await db_session.commit()
 
 
 async def scanned_pdf_extraction_node(
@@ -121,8 +181,7 @@ async def scanned_pdf_extraction_node(
 
     system_prompt = build_system_prompt()
     page_tuples = [
-        (page.page_number, page.media_type, page.image_base64)
-        for page in rendered_pages
+        (page.page_number, page.media_type, page.image_base64) for page in rendered_pages
     ]
     messages = build_extraction_messages(page_tuples)
 
@@ -131,19 +190,6 @@ async def scanned_pdf_extraction_node(
             call_llm=call_gemini_vision,
             system_prompt=system_prompt,
             messages=messages,
-        )
-        await _store_timesheet_payload(state, config, parsed)
-
-        trace_path = store_llm_result_for_testing(
-            source="scanned_pdf",
-            payload=parsed,
-            extra={
-                "file_name": attachment.get("file_name", ""),
-                "page_count": len(rendered_pages),
-            },
-        )
-        logger.info(
-            "Stored scanned PDF extraction result for testing at %s", trace_path
         )
     except ExtractionError as exc:
         logger.error(
@@ -163,5 +209,39 @@ async def scanned_pdf_extraction_node(
                 "page_count": len(rendered_pages),
             },
         )
+        await _mark_scanned_pdf_extraction_failed(state, config, str(exc))
+        return state
+    except Exception as exc:
+        logger.exception(
+            "Unexpected scanned PDF LLM extraction error for attachment %s: %s",
+            attachment.get("file_name", "<unknown>"),
+            exc,
+        )
+        store_llm_result_for_testing(
+            source="scanned_pdf",
+            payload={
+                "success": False,
+                "error": str(exc),
+                "raw_response_on_failure": None,
+            },
+            extra={
+                "file_name": attachment.get("file_name", ""),
+                "page_count": len(rendered_pages),
+            },
+        )
+        await _mark_scanned_pdf_extraction_failed(state, config, str(exc))
+        return state
+
+    await _store_content_extract_payload(state, config, parsed)
+
+    trace_path = store_llm_result_for_testing(
+        source="scanned_pdf",
+        payload=parsed,
+        extra={
+            "file_name": attachment.get("file_name", ""),
+            "page_count": len(rendered_pages),
+        },
+    )
+    logger.info("Stored scanned PDF extraction result for testing at %s", trace_path)
 
     return state

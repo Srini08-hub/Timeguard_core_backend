@@ -53,35 +53,35 @@ class EmailRepository:
 
         return email
 
-    async def create_failed_fetch(
-        self,
-        *,
-        gmail_message_id: str,
-        gmail_thread_id: str = "unknown",
-        failure_stage: str,
-        failure_reason: str,
-        received_at: datetime,
-    ) -> Email:
-        email = Email(
-            gmail_message_id=gmail_message_id,
-            gmail_thread_id=gmail_thread_id,
-            sender_email="",
-            subject=None,
-            body=None,
-            status=EmailStatus.NOT_RECEIVED,
-            failure_stage=failure_stage,
-            failure_reason=failure_reason,
-            received_at=received_at,
-        )
-        self._session.add(email)
-        await self._session.flush()
-        logger.info(
-            "Created failed Email record %s for gmail_message_id=%s",
-            email.email_id,
-            gmail_message_id,
-        )
+    # async def create_failed_fetch(
+    #     self,
+    #     *,
+    #     gmail_message_id: str,
+    #     gmail_thread_id: str = "unknown",
+    #     failure_stage: str,
+    #     failure_reason: str,
+    #     received_at: datetime,
+    # ) -> Email:
+    #     email = Email(
+    #         gmail_message_id=gmail_message_id,
+    #         gmail_thread_id=gmail_thread_id,
+    #         sender_email="",
+    #         subject=None,
+    #         body=None,
+    #         status=EmailStatus.NOT_RECEIVED,
+    #         failure_stage=failure_stage,
+    #         failure_reason=failure_reason,
+    #         received_at=received_at,
+    #     )
+    #     self._session.add(email)
+    #     await self._session.flush()
+    #     logger.info(
+    #         "Created failed Email record %s for gmail_message_id=%s",
+    #         email.email_id,
+    #         gmail_message_id,
+    #     )
 
-        return email
+    #     return email
 
     async def set_status(
         self,
@@ -125,6 +125,10 @@ class EmailRepository:
                 Email.classification_status == EmailClassificationStatus.NOT_TIMESHEET
             )
         )
+        return list(result.scalars().all())
+
+    async def get_emails_by_status(self, status: EmailStatus) -> list[Email]:
+        result = await self._session.execute(select(Email).where(Email.status == status))
         return list(result.scalars().all())
 
     async def get_attachments(

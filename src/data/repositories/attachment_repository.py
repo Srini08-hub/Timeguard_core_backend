@@ -70,3 +70,23 @@ class AttachmentRepository:
         attachment.failure_stage = failure_stage
         attachment.failure_reason = failure_reason
         await self._session.flush()
+
+
+#     async def set_status(
+#     self,
+#     attachment: Attachment,
+#     *,
+#     status: AttachmentStatus,
+#     failure_stage: str | None = None,
+#     failure_reason: str | None = None,
+# ) -> None:
+#         attachment.status = status
+
+#         if status == AttachmentStatus.FAILED:
+#             attachment.failure_stage = failure_stage
+#             attachment.failure_reason = failure_reason
+#         else:
+#             attachment.failure_stage = None
+#             attachment.failure_reason = None
+
+#         await self._session.flush()

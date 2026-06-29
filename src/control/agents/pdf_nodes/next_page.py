@@ -1,17 +1,17 @@
 import pdfplumber
 
-from src.control.agents.state import PDFClassifierState
+from src.control.agents.state import TimeguardState
 
 
-def next_page(state: PDFClassifierState) -> PDFClassifierState:
-    queue = state["page_queue"]
+def next_page(state: TimeguardState) -> TimeguardState:
+    queue = state["pdf_page_queue"]
 
     if not queue:
-        return {**state, "current_page": None}
+        return {**state, "pdf_current_page": None}
 
     idx = queue[0]
 
-    with pdfplumber.open(state["pdf_path"]) as pdf:
+    with pdfplumber.open(state["pdf_file_path"]) as pdf:
         page = pdf.pages[idx]
         text = page.extract_text() or ""
         tables = page.extract_tables() or []
@@ -25,13 +25,13 @@ def next_page(state: PDFClassifierState) -> PDFClassifierState:
 
     return {
         **state,
-        "current_page": {
+        "pdf_current_page": {
             "page_num": idx + 1,
             # "text":     text,
             # "tables":   tables,
             "combined": combined,
         },
-        "page_queue": queue[1:],
-        "anchor_hits": [],
-        "context_snippet": "",
+        "pdf_page_queue": queue[1:],
+        "pdf_anchor_hits": [],
+        "pdf_context_snippet": "",
     }
