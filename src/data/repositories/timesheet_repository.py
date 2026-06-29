@@ -1,11 +1,12 @@
 import logging
-from typing import Any, cast
+from datetime import date
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.data.models.timesheet import Timesheet
+from src.data.models.timesheet import Timesheet, TimesheetStatus
 
 logger = logging.getLogger(__name__)
 
@@ -14,153 +15,88 @@ class TimesheetRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_pending_timesheets(self) -> list[Timesheet]:
+    async def get_under_review_timesheets(self) -> list[Timesheet]:
         result = await self._session.execute(
             select(Timesheet)
-            .where(Timesheet.status == "pending")
+            .where(Timesheet.status == TimesheetStatus.UNDER_REVIEW)
             .order_by(Timesheet.created_at.desc())
         )
         return list(result.scalars().all())
 
-    async def get_by_source(
-        self,
-        *,
-        email_id: UUID,
-        source_type: str,
-        attachment_id: UUID | None,
-    ) -> Timesheet | None:
-        stmt = select(Timesheet).where(
-            Timesheet.email_id == email_id,
-            Timesheet.source_type == source_type,
+    async def get_processed_timesheets(self) -> list[Timesheet]:
+        result = await self._session.execute(
+            select(Timesheet)
+            .where(Timesheet.status == TimesheetStatus.PROCESSED)
+            .order_by(Timesheet.created_at.desc())
         )
-        if attachment_id is None:
-            stmt = stmt.where(Timesheet.attachment_id.is_(None))
-        else:
-            stmt = stmt.where(Timesheet.attachment_id == attachment_id)
+        return list(result.scalars().all())
 
-        result = await self._session.execute(stmt)
+    async def get_by_email_id(self, *, email_id: UUID) -> Timesheet | None:
+        result = await self._session.execute(
+            select(Timesheet).where(Timesheet.email_id == email_id)
+        )
         return result.scalar_one_or_none()
 
-    async def create(
+    async def update_timesheet(
         self,
         *,
         email_id: UUID,
-        source_type: str,
-        attachment_id: UUID | None = None,
-        status: str = "pending",
+        client_name: str | None = None,
+        week_ending: date | None = None,
+        merged_payload: Any = None,
+        enriched_payload: Any = None,
+        status: TimesheetStatus | None = None,
+    ) -> Timesheet | None:
+        timesheet = await self.get_by_email_id(email_id=email_id)
+        if timesheet is None:
+            logger.warning(
+                "Timesheet not found for email_id %s when updating",
+                email_id,
+            )
+            return None
+
+        if client_name is not None:
+            timesheet.client_name = client_name
+
+        if week_ending is not None:
+            timesheet.week_ending = week_ending
+
+        if merged_payload is not None:
+            timesheet.merged_payload = merged_payload
+
+        if enriched_payload is not None:
+            timesheet.enriched_payload = enriched_payload
+
+        if status is not None:
+            timesheet.status = status
+
+        await self._session.flush()
+        logger.info("Updated timesheet for email_id %s", email_id)
+        return timesheet
+
+    async def create_with_merge_data(
+        self,
+        *,
+        email_id: UUID,
+        client_name: str | None = None,
+        week_ending: date | None = None,
+        merged_payload: Any = None,
     ) -> Timesheet:
+
         timesheet = Timesheet(
             email_id=email_id,
-            attachment_id=attachment_id,
-            source_type=source_type,
-            status=status,
+            client_name=client_name,
+            week_ending=week_ending,
+            merged_payload=merged_payload,
+            status=TimesheetStatus.PENDING,
         )
         self._session.add(timesheet)
         await self._session.flush()
         logger.info(
-            "Created Timesheet record %s for email_id=%s source_type=%s "
-            "attachment_id=%s",
+            "Created Timesheet record %s for email_id=%s with client_name=%s week_ending=%s",
             timesheet.timesheet_id,
             email_id,
-            source_type,
-            attachment_id,
+            client_name,
+            week_ending,
         )
-        return timesheet
-
-    async def create_if_not_exists(
-        self,
-        *,
-        email_id: UUID,
-        source_type: str,
-        attachment_id: UUID | None = None,
-        status: str = "pending",
-    ) -> Timesheet:
-        existing = await self.get_by_source(
-            email_id=email_id,
-            source_type=source_type,
-            attachment_id=attachment_id,
-        )
-        if existing is not None:
-            return existing
-
-        return await self.create(
-            email_id=email_id,
-            source_type=source_type,
-            attachment_id=attachment_id,
-            status=status,
-        )
-
-    async def create_for_classified_sources(
-        self,
-        *,
-        email_id: UUID,
-        body_is_timesheet: bool,
-        timesheet_attachment_ids: list[UUID],
-    ) -> list[Timesheet]:
-        created_records: list[Timesheet] = []
-
-        if body_is_timesheet:
-            created = await self.create_if_not_exists(
-                email_id=email_id,
-                source_type="body",
-                attachment_id=None,
-                status="pending",
-            )
-            created_records.append(created)
-
-        for attachment_id in timesheet_attachment_ids:
-            created = await self.create_if_not_exists(
-                email_id=email_id,
-                source_type="attachment",
-                attachment_id=attachment_id,
-                status="pending",
-            )
-            created_records.append(created)
-
-        return created_records
-
-    async def set_extracted_payload(
-        self,
-        *,
-        timesheet_id: UUID,
-        extracted_payload: Any,
-    ) -> Timesheet | None:
-        timesheet = await self._session.get(Timesheet, timesheet_id)
-        if timesheet is None:
-            logger.warning(
-                "Timesheet %s not found when saving extracted payload",
-                timesheet_id,
-            )
-            return None
-
-        timesheet.extracted_payload = extracted_payload
-        await self._session.flush()
-        logger.info("Updated Timesheet %s extracted_payload", timesheet_id)
-        return timesheet
-
-    async def append_extracted_payload(
-        self,
-        *,
-        timesheet_id: UUID,
-        parsed_payload: Any,
-    ) -> Timesheet | None:
-        timesheet = await self._session.get(Timesheet, timesheet_id)
-        if timesheet is None:
-            logger.warning(
-                "Timesheet %s not found when appending extracted payload",
-                timesheet_id,
-            )
-            return None
-
-        current_payload = timesheet.extracted_payload
-        if current_payload is None:
-            timesheet.extracted_payload = cast(Any, [parsed_payload])
-        elif isinstance(current_payload, list):
-            current_payload.append(parsed_payload)
-            timesheet.extracted_payload = cast(Any, current_payload)
-        else:
-            timesheet.extracted_payload = cast(Any, [current_payload, parsed_payload])
-
-        await self._session.flush()
-        logger.info("Appended parsed payload to Timesheet %s", timesheet_id)
         return timesheet

@@ -8,9 +8,7 @@ from src.control.agents.excel_extract_node.probe_extract import SerialisedBlock
 
 
 # from sqlalchemy.dialects.postgresql import UUID
-def _merge_results(
-    left: list[BlockResult], right: list[BlockResult]
-) -> list[BlockResult]:
+def _merge_results(left: list[BlockResult], right: list[BlockResult]) -> list[BlockResult]:
     return left + right
 
 
@@ -33,6 +31,7 @@ class AttachmentState(TypedDict):
     attachment_db_id: NotRequired[UUID]
     is_timesheet: NotRequired[bool]
     timesheet_id: NotRequired[UUID]
+    content_extract_id: NotRequired[UUID]
     # confidence: NotRequired[float]
     # reasoning: NotRequired[str]
     status: str
@@ -56,6 +55,7 @@ class TimeguardState(TypedDict):
     email_body_anchor_hits: NotRequired[list[dict]]
     email_body_context: NotRequired[str]
     email_body_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
+    email_body_content_extract_id: NotRequired[UUID]
     # email_body_extraction_done: NotRequired[bool]
     is_timesheet: NotRequired[bool]
 
@@ -69,6 +69,34 @@ class TimeguardState(TypedDict):
 
     d_blocks: list[SerialisedPdfBlock]
     # results: Annotated[List[BlockResult], _merge_results]
+
+    # Excel classification state (from ExcelClassifierState)
+    excel_file_path: NotRequired[str]
+    excel_sheet_names: NotRequired[list[str]]
+    excel_sheet_queue: NotRequired[list[int]]
+    excel_current_sheet: NotRequired[dict | None]
+    excel_anchor_hits: NotRequired[list[dict]]
+    excel_context_snippet: NotRequired[str]
+    excel_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET", "PENDING"]]
+    merged_result: NotRequired[dict]  # used
+
+    # PDF classification state (from PDFClassifierState)
+    pdf_file_path: NotRequired[str]
+    pdf_page_queue: NotRequired[list[int]]
+    pdf_pages_checked: NotRequired[int]
+    pdf_current_page: NotRequired[dict | None]
+    pdf_anchor_hits: NotRequired[list[dict]]
+    pdf_context_snippet: NotRequired[str]
+    pdf_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
+
+    # Scanned PDF classification state (from ScannedPDFClassifierState)
+    scanned_pdf_file_path: NotRequired[str]
+    scanned_pdf_page_queue: NotRequired[list[int]]
+    scanned_pdf_pages_checked: NotRequired[int]
+    scanned_pdf_current_page: NotRequired[dict | None]
+    scanned_pdf_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
+    scanned_pdf_confidence: NotRequired[float]
+    scanned_pdf_reason: NotRequired[str]
 
 
 # class BlockTaskState(TypedDict):
@@ -99,9 +127,7 @@ class ExcelClassifierState(TypedDict):
     current_sheet: NotRequired[dict | None]  # sheet being worked on
     anchor_hits: NotRequired[list[dict]]  # {keyword, score, position}
     context_snippet: NotRequired[str]  # harvested rows around anchor
-    excel_classification: NotRequired[
-        Literal["TIMESHEET", "NOT_A_TIMESHEET", "PENDING"]
-    ]
+    excel_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET", "PENDING"]]
     # confidence: NotRequired[str]
     # reason: NotRequired[str]
     # sheets_checked: NotRequired[int]

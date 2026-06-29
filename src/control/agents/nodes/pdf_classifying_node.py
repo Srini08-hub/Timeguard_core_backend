@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlparse
 
 import fitz
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def classify_page(text: str, images: list, page_area: float) -> str:
     word_count = len(text.split())
-    has_real_text = word_count > 0
+    has_real_text = word_count > 10
 
     has_significant_image = any(
         (img["width"] * img["height"]) >= 0.30 * page_area for img in images
@@ -88,8 +89,7 @@ def _resolve_attachment_path(attachment: AttachmentState) -> Path:
     #         return matches[0]
 
     raise FileNotFoundError(
-        f"Unable to resolve a stored file for attachment"
-        f" {attachment.get('file_name', '')}"
+        f"Unable to resolve a stored file for attachment {attachment.get('file_name', '')}"
     )
 
 
@@ -121,10 +121,21 @@ def pdf_classifying_node(state: TimeguardState) -> TimeguardState:
         classification,
     )
 
-    return {
-        **state,
-        "attachments": attachments,
-    }
+    # Set pdf_file_path in state for the integrated pdf classification flow
+    result = cast(
+        TimeguardState,
+        {
+            **state,
+            "attachments": attachments,
+            "pdf_file_path": str(pdf_path),
+        },
+    )
+
+    # Also set scanned_pdf_file_path for scanned PDFs
+    if classification == "scanned_pdf":
+        result["scanned_pdf_file_path"] = str(pdf_path)
+
+    return result
 
 
 def route_pdf_classification(state: TimeguardState) -> str:

@@ -19,21 +19,27 @@ def route_after_email_body(state: TimeguardState) -> str:
     # Get the attachments list.
     attachments = state.get("attachments", [])
 
-    # If the attachment is not present, route to email_extraction_node.
+    # If the attachment is not present, route to email_body_extraction_node then merge.
     if not attachments:
         if state.get("email_body_classification") == "TIMESHEET":
+            # Check if email body extraction is already done
+            if state.get("email_body_extracted"):
+                return "merge_node"
             return "email_body_extraction_node"
         return "end"
-    # and not state.get("email_body_extraction_done")
 
     # Loop over the attachments to check if the attachment is timesheet
     # and route based on the attachment type.
     index = state.get("current_attachment_index", 0)
     if index >= len(attachments):
+        # All attachments processed, route to email_body_extraction_node if needed
+        # , then merge
         if state.get("email_body_classification") == "TIMESHEET":
+            if state.get("email_body_extracted"):
+                return "merge_node"
             return "email_body_extraction_node"
-        return "end"
-    #    and not state.get("email_body_extraction_done")
+        return "merge_node"
+
     attachment = attachments[index]
     is_att_timesheet = (
         attachment.get("is_timesheet") or attachment.get("status") == "TIMESHEET"
@@ -52,6 +58,8 @@ def route_after_email_body(state: TimeguardState) -> str:
         return "image_extraction_node"
     elif doc_type == "excel":
         return "excel_extraction_node"
+    elif doc_type == "hybrid_pdf":
+        return "hybrid_pdf_extraction_node"
 
     logger.warning(
         "Unsupported doc_type %r for timesheet attachment at index %d", doc_type, index

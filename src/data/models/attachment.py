@@ -1,3 +1,4 @@
+# from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -11,15 +12,15 @@ from sqlalchemy.sql import func
 from src.data.models.base import Base
 
 if TYPE_CHECKING:
+    from src.data.models.content_extract import ContentExtract
     from src.data.models.email import Email
-    from src.data.models.timesheet import Timesheet
 
 
 class AttachmentStatus(StrEnum):
     PENDING = "pending"
     TIMESHEET = "timesheet"
     NOT_TIMESHEET = "not_timesheet"
-    PROCESSED = "processed"
+    EXTRACTED = "extracted"
     # NOT_PROCESSED = "not_processed"
     FAILED = "failed"
 
@@ -89,9 +90,8 @@ class Attachment(Base):
         "Email",
         back_populates="attachments",
     )
-
-    timesheets: Mapped[list["Timesheet"]] = relationship(
-        "Timesheet",
+    content_extracts: Mapped[list["ContentExtract"]] = relationship(
+        "ContentExtract",
         back_populates="attachment",
         cascade="all, delete-orphan",
     )

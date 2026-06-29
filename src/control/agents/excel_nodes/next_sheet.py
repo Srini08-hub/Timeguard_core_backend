@@ -1,22 +1,22 @@
 import openpyxl
 
-from src.control.agents.state import ExcelClassifierState
+from src.control.agents.state import TimeguardState
 
 
-def next_sheet(state: ExcelClassifierState) -> ExcelClassifierState:
+def next_sheet(state: TimeguardState) -> TimeguardState:
     """
     Load exactly ONE sheet on demand, then close the workbook.
     Extracts cell values row by row for that sheet only.
     """
-    queue = state["sheet_queue"]
+    queue = state["excel_sheet_queue"]
 
     if not queue:
-        return {**state, "current_sheet": None}  # signals graph to stop
+        return {**state, "excel_current_sheet": None}  # signals graph to stop
 
     idx = queue[0]
-    sheet_name = state["sheet_names"][idx]
+    sheet_name = state["excel_sheet_names"][idx]
 
-    wb = openpyxl.load_workbook(state["file_path"], read_only=True, data_only=True)
+    wb = openpyxl.load_workbook(state["excel_file_path"], read_only=True, data_only=True)
     ws = wb[sheet_name]
 
     rows = []
@@ -38,14 +38,14 @@ def next_sheet(state: ExcelClassifierState) -> ExcelClassifierState:
 
     return {
         **state,
-        "current_sheet": {
+        "excel_current_sheet": {
             "sheet_name": sheet_name,
             "sheet_idx": idx,
             "rows": rows,  # list of row lists
             "combined": combined.strip().lower(),
             "is_hidden": is_hidden,
         },
-        "sheet_queue": queue[1:],
-        "anchor_hits": [],
-        "context_snippet": "",
+        "excel_sheet_queue": queue[1:],
+        "excel_anchor_hits": [],
+        "excel_context_snippet": "",
     }

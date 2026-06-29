@@ -14,8 +14,8 @@ from src.control.agents.graph_config import get_db_session
 from src.control.agents.state import AttachmentState, TimeguardState
 from src.data.models.attachment import AttachmentStatus
 from src.data.models.email import EmailClassificationStatus, EmailStatus
+from src.data.repositories.content_extract_repository import ContentExtractRepository
 from src.data.repositories.email_repository import EmailRepository
-from src.data.repositories.timesheet_repository import TimesheetRepository
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +119,7 @@ def _harvest_context(body: str, hits: list[dict]) -> str:
         start = max(0, position - CONTEXT_CHARS)
         end = min(len(body), position + CONTEXT_CHARS)
         snippet = body[start:end].strip()
-        chunks.append(
-            f"[keyword: '{hit['keyword']}' | score: {hit['score']:.0f}%]\n{snippet}"
-        )
+        chunks.append(f"[keyword: '{hit['keyword']}' | score: {hit['score']:.0f}%]\n{snippet}")
 
     return "\n\n".join(chunks)
 
@@ -146,7 +144,8 @@ REASON: [one sentence]
 """
 
     llm = ChatGroq(
-        model_name="llama-3.3-70b-versatile",
+        # model_name="llama-3.3-70b-versatile",
+        model_name="llama-3.1-8b-instant",
         temperature=0,
         api_key=settings.GROQ_API_KEY,
     )
@@ -173,9 +172,7 @@ async def _update_email_classification_status(
 ) -> None:
     email_id = state.get("email_id")
     if email_id is None:
-        logger.warning(
-            "Skipping email classification update because email_id is missing"
-        )
+        logger.warning("Skipping email classification update because email_id is missing")
         return
 
     db_session = get_db_session(config)
@@ -204,7 +201,7 @@ async def _update_email_classification_status(
     )
 
 
-async def _create_timesheet_records(
+async def _create_content_extract_records(
     state: TimeguardState,
     config: RunnableConfig,
     *,
@@ -220,23 +217,15 @@ async def _create_timesheet_records(
 
     email_id = state.get("email_id")
     if email_id is None:
-        logger.warning("Skipping timesheet record creation because email_id is missing")
+        logger.warning("Skipping content extract record creation because email_id is missing")
         return None, attachments
 
-    body_timesheet_id = state.get("email_body_timesheet_id")
+    body_content_extract_id = state.get("email_body_content_extract_id")
     updated_attachments: list[AttachmentState] = []
-    attachment_timesheet_count = 0
-    timesheet_repository = TimesheetRepository(get_db_session(config))
+    attachment_content_extract_count = 0
+    content_extract_repository = ContentExtractRepository(get_db_session(config))
 
-    if body_is_timesheet:
-        body_timesheet = await timesheet_repository.create_if_not_exists(
-            email_id=email_id,
-            source_type="body",
-            attachment_id=None,
-            status="pending",
-        )
-        body_timesheet_id = body_timesheet.timesheet_id
-
+    timesheet_attachment_ids: list[UUID] = []
     for attachment in attachments:
         if not _attachment_is_timesheet(attachment):
             updated_attachments.append(attachment)
@@ -245,37 +234,68 @@ async def _create_timesheet_records(
         attachment_db_id = attachment.get("attachment_db_id")
         if attachment_db_id is None:
             logger.warning(
-                "Skipping timesheet attachment record"
+                "Skipping content extract attachment record"
                 " because attachment_db_id is missing for file %s",
                 attachment.get("file_name", "<unknown>"),
             )
             updated_attachments.append(attachment)
             continue
 
-        attachment_timesheet = await timesheet_repository.create_if_not_exists(
-            email_id=email_id,
-            source_type="attachment",
-            attachment_id=attachment_db_id,
-            status="pending",
-        )
+        timesheet_attachment_ids.append(attachment_db_id)
+
+    created_records = await content_extract_repository.create_for_classified_sources(
+        email_id=email_id,
+        body_is_timesheet=body_is_timesheet,
+        timesheet_attachment_ids=timesheet_attachment_ids,
+    )
+
+    # Map attachment IDs to content_extract_ids
+    attachment_id_to_content_extract_id: dict[UUID, UUID] = {}
+    for record in created_records:
+        if record.attachment_id is not None:
+            attachment_id_to_content_extract_id[record.attachment_id] = (
+                record.content_extract_id
+            )
+        elif record.source_type == "body":
+            body_content_extract_id = record.content_extract_id
+
+    for attachment in attachments:
+        if not _attachment_is_timesheet(attachment):
+            updated_attachments.append(attachment)
+            continue
+
+        attachment_db_id = attachment.get("attachment_db_id")
+        if attachment_db_id is None:
+            updated_attachments.append(attachment)
+            continue
+
+        content_extract_id = attachment_id_to_content_extract_id.get(attachment_db_id)
+        if content_extract_id is None:
+            logger.warning(
+                "No content_extract_id found for attachment %s",
+                attachment.get("file_name", "<unknown>"),
+            )
+            updated_attachments.append(attachment)
+            continue
+
         updated_attachments.append(
             AttachmentState(
                 **{
                     **attachment,
-                    "timesheet_id": attachment_timesheet.timesheet_id,
+                    "content_extract_id": content_extract_id,
                 }
             )
         )
-        attachment_timesheet_count += 1
+        attachment_content_extract_count += 1
 
     db_session = get_db_session(config)
     await db_session.commit()
     logger.info(
-        "Created or reused %d attachment timesheet record(s) for email %s",
-        attachment_timesheet_count,
+        "Created or reused %d attachment content extract record(s) for email %s",
+        attachment_content_extract_count,
         email_id,
     )
-    return body_timesheet_id, updated_attachments
+    return body_content_extract_id, updated_attachments
 
 
 async def email_body_node(
@@ -288,39 +308,65 @@ async def email_body_node(
     classification = EmailBodyClassification.NOT_A_TIMESHEET
     anchor_hits: list[dict] = []
     context_snippet = ""
+    llm_failed = False
 
-    if not body_text:
-        logger.info("Skipping email body classification because body is empty")
-    elif len(body_text) < SHORT_BODY_CHAR_THRESHOLD:
-        logger.info(
-            "Email body is short (%d chars); classifying directly with LLM",
-            len(body_text),
-        )
-        classification = _classify_email_body(body_text)
-        context_snippet = body_text
-    else:
-        anchor_hits = _fuzzy_match_anchors(body)
-        if not anchor_hits:
-            logger.info("No timesheet anchors found in email body")
+    try:
+        if not body_text:
+            logger.info("Skipping email body classification because body is empty")
+        elif len(body_text) < SHORT_BODY_CHAR_THRESHOLD:
+            logger.info(
+                "Email body is short (%d chars); classifying directly with LLM",
+                len(body_text),
+            )
+            classification = _classify_email_body(body_text)
+            context_snippet = body_text
         else:
-            context_snippet = _harvest_context(body, anchor_hits)
-            classification = _classify_email_body(context_snippet)
+            anchor_hits = _fuzzy_match_anchors(body)
+            if not anchor_hits:
+                logger.info("No timesheet anchors found in email body")
+            else:
+                context_snippet = _harvest_context(body, anchor_hits)
+                classification = _classify_email_body(context_snippet)
+        logger.info(f"classification result for email body: {classification}")
+    except Exception as e:
+        logger.exception("LLM classification failed for email body: %s", e)
+        llm_failed = True
+        classification = EmailBodyClassification.NOT_A_TIMESHEET
 
-    should_mark_email_timesheet = (
-        classification == EmailBodyClassification.TIMESHEET
-        or any(_attachment_is_timesheet(attachment) for attachment in attachments)
+        # Set email status to FAILED
+        email_id = state.get("email_id")
+        if email_id:
+            db_session = get_db_session(config)
+            email_repository = EmailRepository(db_session)
+            email = await email_repository.get_by_id(email_id)
+            if email:
+                await email_repository.set_status(
+                    email,
+                    EmailStatus.FAILED,
+                    failure_stage="email_body_classification",
+                    failure_reason=str(e),
+                )
+                await db_session.commit()
+                logger.info("Set email %s status to FAILED due to LLM error", email_id)
+                raise e
+    should_mark_email_timesheet = classification == EmailBodyClassification.TIMESHEET or any(
+        _attachment_is_timesheet(attachment) for attachment in attachments
     )
-    await _update_email_classification_status(
-        state,
-        config,
-        should_mark_email_timesheet,
-    )
-    email_body_timesheet_id, updated_attachments = await _create_timesheet_records(
+
+    # Only update classification status if LLM didn't fail
+    if not llm_failed:
+        await _update_email_classification_status(
+            state,
+            config,
+            should_mark_email_timesheet,
+        )
+
+    email_body_content_extract_id, updated_attachments = await _create_content_extract_records(
         state,
         config,
         body_is_timesheet=classification == EmailBodyClassification.TIMESHEET,
         attachments=attachments,
-        should_create_records=should_mark_email_timesheet,
+        should_create_records=should_mark_email_timesheet and not llm_failed,
     )
 
     result = {
@@ -332,6 +378,6 @@ async def email_body_node(
         "attachments": updated_attachments,
         "current_attachment_index": 0,
     }
-    if email_body_timesheet_id is not None:
-        result["email_body_timesheet_id"] = email_body_timesheet_id
+    if email_body_content_extract_id is not None:
+        result["email_body_content_extract_id"] = email_body_content_extract_id
     return cast(TimeguardState, result)

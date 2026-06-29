@@ -26,6 +26,10 @@ dependencies = [
     "langsmith>=0.8.16",
     "google-auth-oauthlib>=1.4.0",
     "llama-cloud>=1.6.0",
+    "llama-parse>=0.5.20",
+    "scipy>=1.15.3",
+    "langgraph-checkpoint-postgres>=2.0.11",
+    "psycopg-binary>=3.3.4",
 ]
 
 [dependency-groups]
@@ -35,7 +39,7 @@ dev = [
     "ruff>=0.15.16",
 ]
 [tool.ruff]
-line-length = 88
+line-length = 95
 target-version = "py313"
 [tool.ruff.lint.per-file-ignores]
 "src/control/agents/digital_extract_node/prompts.py" = ["E501"]
@@ -43,6 +47,11 @@ target-version = "py313"
 "src/control/agents/extract_email_body_node/prompts.py" = ["E501"]
 "src/control/agents/image_extract_node/prompts.py" = ["E501"]
 "src/control/agents/scanned_pdf_extraction_node/prompts.py" = ["E501"]
+"src/control/agents/hybrid_pdf_extract_node/prompts.py" = ["E501"]
+"src/control/agents/merge_node/prompts.py" = ["E501"]
+"src/data/migrations/alembic/versions/*.py" = ["ALL"]
+
+
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

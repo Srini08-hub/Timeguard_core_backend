@@ -1,28 +1,24 @@
-from src.control.agents.state import ExcelClassifierState
+from src.control.agents.state import TimeguardState
 
 
-def harvest_context(state: ExcelClassifierState) -> ExcelClassifierState:
+def harvest_context(state: TimeguardState) -> TimeguardState:
     """
     For Excel: grab rows surrounding the anchor hit row
     + the full header row (row 0) for column context.
     """
-    sheet = state.get("current_sheet")
+    sheet = state.get("excel_current_sheet")
     if not sheet:
         return state
     # text   = sheet["combined"]
     rows = sheet.get("rows", [])
-    hits = state.get("anchor_hits", [])
+    hits = state.get("excel_anchor_hits", [])
     chunks = []
 
     for hit in hits:
         # Find which row index contains the matched keyword
         kw = hit["keyword"].lower()
         matched_row_idx = next(
-            (
-                i
-                for i, row in enumerate(rows)
-                if any(kw in str(cell).lower() for cell in row)
-            ),
+            (i for i, row in enumerate(rows) if any(kw in str(cell).lower() for cell in row)),
             0,
         )
 
@@ -41,4 +37,4 @@ def harvest_context(state: ExcelClassifierState) -> ExcelClassifierState:
             f"Surrounding rows:\n{context_str}"
         )
 
-    return {**state, "context_snippet": "\n\n".join(chunks)}
+    return {**state, "excel_context_snippet": "\n\n".join(chunks)}

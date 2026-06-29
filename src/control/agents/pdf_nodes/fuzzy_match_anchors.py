@@ -1,6 +1,6 @@
 from rapidfuzz import fuzz
 
-from src.control.agents.state import PDFClassifierState
+from src.control.agents.state import TimeguardState
 
 ANCHOR_KEYWORDS = [
     "timesheet",
@@ -59,8 +59,8 @@ def find_keyword_position(
     return False, 0.0, -1
 
 
-def fuzzy_match_anchors(state: PDFClassifierState) -> PDFClassifierState:
-    page = state.get("current_page")
+def fuzzy_match_anchors(state: TimeguardState) -> TimeguardState:
+    page = state.get("pdf_current_page")
     text = page.get("combined", "") if page else ""
     hits = []
 
@@ -75,6 +75,6 @@ def fuzzy_match_anchors(state: PDFClassifierState) -> PDFClassifierState:
     )[:3]
     return {
         **state,
-        "anchor_hits": hits,
-        "pages_checked": state.get("pages_checked", 0) + 1,
+        "pdf_anchor_hits": hits,
+        "pdf_pages_checked": state.get("pdf_pages_checked", 0) + 1,
     }
