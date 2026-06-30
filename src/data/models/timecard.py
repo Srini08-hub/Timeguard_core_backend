@@ -108,6 +108,31 @@ class Timecard(Base):
         nullable=True,
     )
 
+    pay_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+    )
+
+    regular_pay: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+    )
+
+    ot_pay: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+    )
+
+    dt_pay: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+    )
+
+    gross_pay: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+    )
+
     status: Mapped[TimecardStatus] = mapped_column(
         SQLEnum(
             TimecardStatus,

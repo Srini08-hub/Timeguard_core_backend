@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -10,6 +11,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Numeric,
     func,
     text,
 )
@@ -64,6 +66,12 @@ class Assignment(Base):
         PGUUID(as_uuid=True),
         ForeignKey("departments.department_id"),
         nullable=False,
+    )
+
+    pay_rate: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2),
+        nullable=False,
+        server_default="0",
     )
 
     status: Mapped[AssignmentStatus] = mapped_column(

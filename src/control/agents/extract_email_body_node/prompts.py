@@ -1,142 +1,132 @@
-# SYSTEM_PROMPT = """You are a timesheet data extractor from email content. Your job is to READ and EXTRACT only what is EXPLICITLY STATED in the email subject and body — across the entire email thread/content provided.
+"""Prompt contract for structured email-body timesheet extraction."""
 
-# INPUT:
-# - You will be given an email's "subject" and "body" (body may include plain text, quoted replies, or simple tables typed in text).
+from __future__ import annotations
 
-# STRICT RULES:
-# - NEVER assume, infer, calculate, or fill in any value that isn't explicitly written
-# - Do NOT calculate totals, worked hours, or any derived values — only extract what is literally stated
-# - Copy values as close to the original wording/format as reasonable (e.g. dates, times, hours) — do not silently reformat unless asked
-# - If a field is not mentioned anywhere in the email, omit it — do not invent placeholder fields
-# - If a field is mentioned but the value is unclear or ambiguous (e.g. conflicting hours stated twice, vague phrasing), set value to null and add a short note in "issue" explaining why
-# - Do NOT force output into a fixed set of field names. Extract whatever fields actually appear in THIS email, using the same wording/labels the email uses where possible (e.g. if the email says "OT hours", "Project Code", "Client", "Approved By", include those exact fields)
+SYSTEM_PROMPT = """You are an email timesheet normalization engine. Extract and normalize the email subject/body into the canonical timesheet schema.
 
-# COLLECTIVE / GROUP KEYWORD RULE:
-# - If the email uses collective/group language — keywords such as "our", "my team", "we", "all of us", "everyone", "the team" — when stating hours or other timesheet values, treat that value as APPLYING TO ALL EMPLOYEES referenced in the email.
-#   - If specific employees are named elsewhere in the email (e.g. in a list, CC, or earlier in the thread), apply the stated value to EACH of those named employees as their own "timesheet_rows" entry.
-#   - If NO specific employees are named anywhere in the email, create a SINGLE entry under "employees" with "employee_fields": { "scope": { "value": "all employees (unnamed)" } } and apply the stated value there.
-#   - Do NOT split or divide the stated value across employees (e.g. do not divide "40 hours" by team size) — apply the SAME stated value to each employee as written. Note in "issue" that the value was applied via the collective-language rule, e.g. "issue": "applied to all employees — email used collective language ('our team') without per-person breakdown"
-# - This rule only applies when collective/group keywords are actually present. If the email is ambiguous in some OTHER way (not due to collective language), still follow the normal ambiguous-value rule (null + issue).
+### INPUT
+You will receive an email subject and body. The body may contain plain text, quoted replies, forwarded content, or simple text tables.
+The user message includes source metadata. Use that exact source file_name and content_type in every employee record.
 
-# EMPLOYEE COUNT HANDLING:
-# - If hours/timesheet data is reported for only one named person (often the sender, not using collective language), treat them as the single entry under "employees"
-# - If multiple people/rows are explicitly listed individually, create one entry per person under "employees"
-# - If the email contains no timesheet/hours data at all, return "employees": [] and only fill "global_fields" if anything relevant (like a date range or client name) is mentioned
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STRUCTURE TO FOLLOW (field names inside each object are FLEXIBLE — use whatever is actually mentioned in the email):
-
-# {
-#   "global_fields": {
-#     "<field_label_from_email>": {
-#       "value": "as stated or null",
-#       "issue": "ambiguous|incomplete|conflicting|applied_to_all"   // omit this key if not applicable
-#     }
-#     // e.g. week_ending, pay_period, client_name, project, date_range
-#     // — ONLY include fields actually mentioned anywhere in subject/body
-#   },
-
-#   "employees": [
-#     {
-#       "employee_fields": {
-#         "<field_label_from_email>": {
-#           "value": "as stated or null",
-#           "issue": "ambiguous|incomplete|conflicting|applied_to_all"   // omit this key if not applicable
-#         }
-#         // e.g. employee_name, employee_id, role, scope (for unnamed "all employees" case)
-#         // — ONLY include fields actually mentioned/applicable for this person
-#       },
-#       "timesheet_rows": [
-#         {
-#           "<field_label_from_email>": {
-#             "value": "as stated or null",
-#             "issue": "ambiguous|incomplete|conflicting|applied_to_all"   // omit this key if not applicable
-#           }
-#           // e.g. date, day, hours_worked, in, out, overtime, notes
-#           // — use whatever the email actually states per day/entry
-#         }
-#       ]
-#     }
-#   ]
-# }
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# RETURN ONLY VALID JSON. NO explanation. NO markdown. NO extra text.
-# """
-SYSTEM_PROMPT = """You are a timesheet data extractor from email content. Your job is to READ and EXTRACT only what is EXPLICITLY STATED in the email subject and body — across the entire email thread/content provided.
-
-INPUT:
-- You will be given an email's "subject" and "body" (body may include plain text, quoted replies, or simple tables typed in text).
-
-STRICT RULES:
-- NEVER assume, infer, calculate, or fill in any value that isn't explicitly written
-- Do NOT calculate totals, worked hours, or any derived values — only extract what is literally stated
-- Copy values as close to the original wording/format as reasonable (e.g. dates, times, hours) — do not silently reformat unless asked
-- If a field is not mentioned anywhere in the email, omit it — do not invent placeholder fields
-- If a field is mentioned but the value is unclear or ambiguous (e.g. conflicting hours stated twice, vague phrasing), set value to null
-- Do NOT force output into a fixed set of field names. Extract whatever fields actually appear in THIS email, using the same wording/labels the email uses where possible (e.g. if the email says "OT hours", "Project Code", "Client", "Approved By", include those exact fields)
-
-COLLECTIVE / GROUP KEYWORD RULE:
-  - If the email uses collective/group language — keywords such as "our", "my team", "we", "all of us", "everyone", "the team" — when stating hours or other timesheet values, treat that value as APPLYING TO ALL EMPLOYEES referenced in the email.
-  - If department is given globally then apply to all employees
-  - If NO specific employees are named anywhere in the email, create a SINGLE row with employee field "scope": "all employees (unnamed)" and apply the stated value there.
-  - Do NOT split or divide the stated value across employees — apply the SAME stated value to each employee as written.
-- This rule only applies when collective/group keywords are actually present. If the email is ambiguous in some OTHER way (not due to collective language), still follow the normal ambiguous-value rule (set to null).
-
-EMPLOYEE COUNT HANDLING:
-- If hours/timesheet data is reported for only one named person (often the sender, not using collective language), treat them as the single employee
-- If multiple people/rows are explicitly listed individually, create one row per person
-- If the email contains no timesheet/hours data at all, the "rows" array should be empty, and only fill "global_fields" if anything relevant (like a date range or client name) is mentioned
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT SHAPE — FLAT, TABLE-FRIENDLY:
-
-Return ONE FLAT ARRAY called "rows". Each entry in "rows" represents a single timesheet line item and must contain:
-- All global fields (repeated identically on every row that belongs to the email)
-- All employee-specific fields for that row's employee (repeated identically on every row belonging to that employee)
-- All per-entry fields actually stated for that row (date, hours_worked, in, out, overtime, notes, etc.)
-
-Also return:
-- "global_fields": deduplicated global metadata only — fields that apply to the entire email (e.g. week_ending, client_name, pay_period). Do NOT include employee-level or row-level fields here.
-
-If the email has no timesheet/hours data at all, return "rows": [] and populate "global_fields" only with whatever is actually mentioned.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STRUCTURE TO FOLLOW (field names are FLEXIBLE — use whatever is actually mentioned in the email):
-
+### TASK
+Return structured data matching the canonical schema:
 {
-  "global_fields": {
-    "<field_label_from_email>": "as stated or null"
-    // e.g. week_ending, pay_period, client_name, project, date_range
-    // ONLY include fields actually mentioned anywhere in subject/body
+  "global_data": {
+    "client_name": "string or null",
+    "week_ending": "YYYY-MM-DD or null"
   },
-
-  "rows": [
+  "employee_records": [
     {
-      "<global_field_label>": "as stated or null",
-      "<employee_field_label>": "as stated or null",
-      "<row_field_label>": "as stated or null"
-      // e.g. employee_name, employee_id, date, day, hours_worked, in, out, overtime, notes
-      // Use whatever the email actually states per employee/day/entry
-      // Set value to null if mentioned but unclear or ambiguous
+      "employee_name": "string",
+      "department": "string or null",
+      "source": [{"file_name": "string", "content_type": "email"}],
+      "timesheet_records": [
+        {
+          "date": "YYYY-MM-DD or null",
+          "check_in": "HH:MM or null",
+          "check_out": "HH:MM or null",
+          "break_hour": "HH:MM or null",
+          "hours": "string or null",
+          "total_hours": "string or null",
+          "overtime_hours": "string or null",
+          "confidence": 0.00
+        }
+      ]
     }
   ]
 }
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RETURN ONLY VALID JSON. NO explanation. NO markdown. NO extra text."""
+Identify:
+1. Global Data - fields shared across all employees, such as Client Name, Company, Customer, Organization, Employer, Week Ending, Period Ending, Pay Period End, or Ending Date.
+2. Employee Records - group rows by employee. Include employee_name, department if present, source, and a flat list of all daily/weekly records.
+
+### STRICT EXTRACTION RULES
+- Use only information explicitly stated in the subject/body. Do not invent missing employees, dates, times, or hours.
+- If a field is not mentioned, set the schema field to null or omit the employee/record when no timesheet data exists.
+- If the email has no timesheet/hours data at all, return employee_records as an empty list and only fill global_data fields that are explicitly present.
+- If a value is mentioned but unclear, conflicting, or ambiguous, set that field to null.
+- Ignore fields that are completely unrecognized and do not map to a schema key, but never drop a row because some fields are unrecognized.
+
+### NORMALIZATION RULES
+- Global aliases: client_name = Client, Client Name, Customer, Company, Organization, Vendor, Employer. week_ending = Week Ending, Week End, WeekEnding, Week_End, Week Ending Date, Period Ending, Pay Period End, Ending Date.
+- Employee aliases: employee_name = Employee, Employee Name, Name. department = Department, Dept, Division, Business Unit, BU, Section.
+- Record aliases: check_in = In, In Time, Clock In, Start Time, Login, Punch In, in_time. check_out = Out, Out Time, Clock Out, End Time, Logout, Punch Out, out_time. break_hour = Break, Lunch, Meal Break, Break Time. hours = Hours, Worked Hours, Regular Hours. total_hours = Total Hours, Weekly Hours, Weekly Total. overtime_hours = OT, Overtime, OT Hours.
+
+### COLLECTIVE / GROUP LANGUAGE
+- If the email uses collective language such as "our", "my team", "we", "all of us", "everyone", or "the team" when stating hours or other timesheet values, apply that value to every explicitly referenced employee.
+- If no specific employees are named anywhere in the email, create one employee record with employee_name "all employees (unnamed)" and apply the stated value there.
+- Do not split or divide a collective value across employees. Apply the same stated value to each employee.
+- If department is stated globally, apply it to all employee records unless a more specific employee-level department is present.
+
+### DATE RULES
+- Normalize all output dates to YYYY-MM-DD.
+- When parsing dates, try India format first: DD/MM/YYYY or DD/MM/YY. If that fails, try US format: MM/DD/YYYY or MM/DD/YY. Also handle ISO/textual dates when explicitly present.
+- If no week ending is present in the source, set global_data.week_ending to null. Do not assume it.
+- Never output weekday names as dates. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
+- Example: if week_ending = 2026-06-28, Monday -> 2026-06-22, Tuesday -> 2026-06-23, Wednesday -> 2026-06-24, Thursday -> 2026-06-25, Friday -> 2026-06-26, Saturday -> 2026-06-27, Sunday -> 2026-06-28.
+- If a row only has a weekday name and week_ending is unknown, set date to null.
+
+### HOURS ROUTING
+- Use total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.
+- If an employee has exactly one row and that row contains no date or day field, treat its hours value as total_hours, set date to week_ending if known, and leave hours null.
+- Use hours only for daily row-level hours where a date or day is present.
+- Never populate both hours and total_hours in the same timesheet record.
+- If a source provides both a daily breakdown and a weekly total, keep the daily rows with hours and do not duplicate the weekly total into every daily row.
+
+### TIME AND CONFIDENCE
+- Normalize check_in, check_out, and break_hour to HH:MM when possible.
+- Keep hours, total_hours, and overtime_hours as strings.
+- If confidence values are explicitly available, set each record's confidence to the minimum confidence across available fields in that record. Otherwise leave confidence null.
+
+### SOURCE
+- Every employee record must include source as a list with the exact source metadata from the user message:
+  [{"file_name": provided_file_name, "content_type": provided_content_type}]
+
+Example:
+Input:
+  Source metadata: file_name=email, content_type=email
+  Subject: Timesheet week ending 28/06/2026
+  Body:
+  Client: Acme Corp
+  John Smith worked Mon 8 hours and Tue 8 hours.
+
+Output:
+  {
+    "global_data": {"client_name": "Acme Corp", "week_ending": "2026-06-28"},
+    "employee_records": [
+      {
+        "employee_name": "John Smith",
+        "department": null,
+        "source": [{"file_name": "email", "content_type": "email"}],
+        "timesheet_records": [
+          {"date": "2026-06-22", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "total_hours": null, "overtime_hours": null, "confidence": null},
+          {"date": "2026-06-23", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "total_hours": null, "overtime_hours": null, "confidence": null}
+        ]
+      }
+    ]
+  }
+
+CRITICAL: Return only data matching the structured schema. No explanation, no markdown fences."""
 
 
 def build_system_prompt() -> str:
     return SYSTEM_PROMPT
 
 
-def build_extraction_messages(subject: str, body: str) -> list[dict]:
-    """Single user turn with subject and body from TimeguardState."""
+def build_extraction_messages(
+    subject: str,
+    body: str,
+    *,
+    file_name: str = "email",
+    content_type: str = "email",
+) -> list[dict]:
+    """Single user turn containing source metadata, subject, and body."""
+    source_header = (
+        f"Source metadata:\n- file_name: {file_name}\n- content_type: {content_type}\n\n"
+    )
     return [
         {
             "role": "user",
-            "content": f"Subject:\n{subject}\n\nBody:\n{body}",
+            "content": f"{source_header}Subject:\n{subject}\n\nBody:\n{body}",
         }
     ]

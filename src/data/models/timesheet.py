@@ -139,11 +139,7 @@ class Timesheet(Base):
         nullable=True,
     )
 
-    merged_payload: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB,
-        nullable=True,
-    )
-    enriched_payload: Mapped[dict[str, Any] | None] = mapped_column(
+    payload: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB,
         nullable=True,
     )

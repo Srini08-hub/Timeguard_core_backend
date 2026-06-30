@@ -19,9 +19,9 @@ from langchain_groq import ChatGroq
 
 from src.config.settings import settings
 
-# MODEL_NAME = "llama-3.3-70b-versatile"
+MODEL_NAME = "llama-3.3-70b-versatile"
 # MODEL_NAME="qwen/qwen3-32b"
-MODEL_NAME = "openai/gpt-oss-120b"
+# MODEL_NAME = "openai/gpt-oss-120b"
 LLM_PAYLOAD_LOG = Path("results") / "llm_payloads.jsonl"
 
 _client = None
@@ -31,7 +31,7 @@ _payload_log_lock = threading.Lock()
 def _get_client() -> Any:
     global _client
     if _client is None:
-        api_key = settings.GROQ_API_KEY
+        api_key = settings.GROQ_API_KEY_1
         if not api_key:
             raise RuntimeError(
                 "GROQ_API_KEY is not set. Export it before calling the "

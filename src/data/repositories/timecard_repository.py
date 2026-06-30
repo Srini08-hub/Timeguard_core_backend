@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.exceptions.custom_exception import DatabaseException
+from src.data.models.assignments import Assignment
+from src.data.models.client_rules import ClientRule
 from src.data.models.timecard import ExceptionSeverity as TimecardSeverity
 from src.data.models.timecard import Timecard, TimecardStatus
 
@@ -28,6 +30,30 @@ class TimecardRepository:
         except SQLAlchemyError as e:
             raise DatabaseException(f"Failed to get timecards by timesheet: {str(e)}") from e
 
+    async def get_by_status(
+        self,
+        status: TimecardStatus,
+        *,
+        week_ending: date | None = None,
+    ) -> list[Timecard]:
+        try:
+            statement = (
+                select(Timecard)
+                .options(selectinload(Timecard.exceptions))
+                .where(Timecard.status == status)
+            )
+            if week_ending is not None:
+                statement = statement.where(Timecard.week_ending == week_ending)
+            statement = statement.order_by(
+                Timecard.week_ending.desc(),
+                Timecard.employee_name.asc(),
+                Timecard.created_at.asc(),
+            )
+            result = await self._session.execute(statement)
+            return list(result.scalars().all())
+        except SQLAlchemyError as e:
+            raise DatabaseException(f"Failed to get timecards by status: {str(e)}") from e
+
     async def get_by_id(self, timecard_id: UUID) -> Timecard | None:
         try:
             result = await self._session.execute(
@@ -38,6 +64,24 @@ class TimecardRepository:
             return result.scalar_one_or_none()
         except SQLAlchemyError as e:
             raise DatabaseException(f"Failed to get timecard by id: {str(e)}") from e
+
+    async def get_assignment(self, assignment_id: UUID) -> Assignment | None:
+        try:
+            result = await self._session.execute(
+                select(Assignment).where(Assignment.assignment_id == assignment_id)
+            )
+            return result.scalar_one_or_none()
+        except SQLAlchemyError as e:
+            raise DatabaseException(f"Failed to get assignment for timecard: {str(e)}") from e
+
+    async def get_client_rule(self, rule_id: UUID) -> ClientRule | None:
+        try:
+            result = await self._session.execute(
+                select(ClientRule).where(ClientRule.rule_id == rule_id)
+            )
+            return result.scalar_one_or_none()
+        except SQLAlchemyError as e:
+            raise DatabaseException(f"Failed to get client rule for timecard: {str(e)}") from e
 
     # async def delete_by_timesheet(self, timesheet_id: UUID) -> None:
     #     await self._session.execute(
@@ -95,6 +139,29 @@ class TimecardRepository:
             return timecard
         except SQLAlchemyError as e:
             raise DatabaseException(f"Failed to set timecard status: {str(e)}") from e
+
+    async def set_approved_payroll(
+        self,
+        timecard: Timecard,
+        *,
+        pay_rate: Decimal,
+        regular_pay: Decimal,
+        ot_pay: Decimal,
+        dt_pay: Decimal,
+        gross_pay: Decimal,
+    ) -> Timecard:
+        try:
+            timecard.pay_rate = pay_rate
+            timecard.regular_pay = regular_pay
+            timecard.ot_pay = ot_pay
+            timecard.dt_pay = dt_pay
+            timecard.gross_pay = gross_pay
+            timecard.status = TimecardStatus.APPROVED
+            await self._session.flush()
+            await self._session.refresh(timecard)
+            return timecard
+        except SQLAlchemyError as e:
+            raise DatabaseException(f"Failed to approve timecard payroll: {str(e)}") from e
 
     async def resolve_with_update(
         self,

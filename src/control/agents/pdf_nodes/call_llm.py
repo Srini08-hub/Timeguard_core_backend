@@ -114,7 +114,7 @@ REASON: [one sentence]
             # model_name="llama-3.3-70b-versatile",
             model_name="llama-3.1-8b-instant",
             temperature=0,
-            api_key=settings.GROQ_API_KEY,
+            api_key=settings.GROQ_API_KEY_1,
         )
         structured_llm = llm.with_structured_output(PDFClassificationResponse)
         response = structured_llm.invoke([HumanMessage(content=prompt)])

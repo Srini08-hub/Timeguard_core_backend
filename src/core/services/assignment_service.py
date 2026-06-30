@@ -40,6 +40,7 @@ class AssignmentService:
                     emp_id=assignment_payload.emp_id,
                     client_id=assignment_payload.client_id,
                     department_id=assignment_payload.department_id,
+                    pay_rate=assignment_payload.pay_rate,
                 )
                 await self._employee_repository.update_assignment(
                     assignment.emp_id, is_assigned=True
@@ -79,10 +80,14 @@ class AssignmentService:
         if assignment is None:
             raise ResourceNotFound("Assignment not found")
 
-        if payload.status:
+        status = AssignmentStatus(payload.status.value) if payload.status else None
+
+        if status is not None or payload.pay_rate is not None:
             try:
                 updated_assignment = await self._assignment_repository.update(
-                    assignment, status=AssignmentStatus(payload.status.value)
+                    assignment,
+                    status=status,
+                    pay_rate=payload.pay_rate,
                 )
                 return self._to_response(updated_assignment)
             except DatabaseException:
@@ -113,6 +118,7 @@ class AssignmentService:
             emp_id=assignment.emp_id,
             client_id=assignment.client_id,
             department_id=assignment.department_id,
+            pay_rate=assignment.pay_rate,
             status=assignment.status,
             created_at=assignment.created_at,
         )

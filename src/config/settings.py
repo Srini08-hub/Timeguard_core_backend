@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     GOOGLE_REFRESH_TOKEN: str
     GMAIL_POLL_MAILBOX_ADDRESS: str
     GMAIL_POLL_INTERVAL_SECONDS: int = 120
-    GROQ_API_KEY: str
+    GROQ_API_KEY_1: str
+    GROQ_API_KEY_2: str
     GOOGLE_API_KEY: str
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"

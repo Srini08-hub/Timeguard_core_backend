@@ -97,6 +97,7 @@ class TimeguardState(TypedDict):
     scanned_pdf_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
     scanned_pdf_confidence: NotRequired[float]
     scanned_pdf_reason: NotRequired[str]
+    payload: NotRequired[dict]
 
 
 # class BlockTaskState(TypedDict):
