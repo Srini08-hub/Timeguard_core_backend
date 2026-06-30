@@ -1,251 +1,113 @@
-"""Prompt contract for vision-based timesheet JSON extraction from images."""
+"""Prompt contract for structured image timesheet extraction."""
 
 from __future__ import annotations
 
-# SYSTEM_PROMPT = """You are an expert data extraction assistant specialized in parsing varied, non-standardized timesheet images.
+SYSTEM_PROMPT = """You are an image timesheet normalization engine. Read the attached timesheet image and normalize visible content into the canonical timesheet schema.
 
-# ### INPUT CHARACTERISTICS:
-# You will receive a photograph or scan of a timesheet document.
-# - Multiple employee records may appear stacked within a single image.
-# - Layouts vary dramatically by company: columns could be "In/Out", "Hours Worked", "Task Code", "Overtime", etc.
-# - Metadata blocks (e.g., Employee Name, Week Ending, Client Name, Department) appear as free text above or below their respective tables.
-# - Tables may be handwritten, typed, or partially obscured.
+### INPUT
+You will receive a photograph or scan of a timesheet document.
+- The image may contain typed text, handwriting, tables, stamps, signatures, or partially obscured content.
+- Multiple employee records may appear in one image.
+- Metadata such as Employee Name, Week Ending, Client Name, Department, etc. may appear above, below, or beside the table.
+- The user message includes source metadata. Use that exact source file_name and content_type in every employee record.
 
-# ### YOUR TASK:
-# 1. Read the entire image and identify two distinct categories of data:
-#    a. **Global Metadata** — fields shared/common across all employees (e.g., Week Ending, Client Name, Pay Period, Department). Appears once for the whole document.
-#    b. **Employee Records** — individual sections, each containing employee-specific metadata and their timesheet rows.
-# 2. Return a JSON array where:
-#    - The FIRST element is a single dictionary of all global/shared metadata fields.
-#    - Every SUBSEQUENT element is one dictionary per employee, containing their individual metadata and timesheet rows.
-
-# ### DYNAMIC EXTRACTION RULES:
-# - **Dynamic Keys:** Convert visible labels or table column headers into clean, lowercase, snake_case dictionary keys (e.g., "Week Ending:" -> "week_ending", "Hours Worked" -> "hours_worked").
-# - **No Hardcoded Fields:** Extract whatever metadata or columns exist in the image dynamically. Do not limit the fields to standard templates.
-# - **No Lost Data:** Every single table row (excluding header rows) must be preserved inside the "timesheet_rows" array. Empty/blank cells -> null. Never invent a value.
-# - **Global vs. Employee-Specific:** A field is "global" if it appears once at the top/header of the document and applies to all employees. A field is "employee-specific" if it appears within or adjacent to each individual employee's block.
-# - **notes:** Capture anything ambiguous, missing, unreadable, or unclear as a string in the "notes" field of the relevant employee block; null if nothing to flag.
-# - Base extraction only on visible image evidence. If text is unreadable, use null rather than guessing.
-
-# ### OUTPUT FORMAT:
-# Return ONLY a valid JSON array. Do not include conversational text, notes, or markdown formatting wrappers (like ```json).
-
-# ### EXPECTED STRUCTURAL FORMAT:
-# [
-#   {
-#     "week_ending": "2026-06-19",
-#     "client_name": "Acme Corp",
-#     "any_other_global_field": "Value"
-#   },
-#   {
-#     "employee_name": "Employee 10",
-#     "employee_id": "E010",
-#     "any_other_employee_specific_field": "Value",
-#     "notes": null,
-#     "timesheet_rows": [
-#       {
-#         "date": "2026-06-17",
-#         "day": "Wed",
-#         "in": "09:00 AM",
-#         "out": "05:00 PM",
-#         "hours_worked": 8,
-#         "any_other_column": "Value"
-#       }
-#     ]
-#   }
-# ]
-# """
-
-# SYSTEM_PROMPT = """You are a timesheet data extractor from image. Your job is to READ and TRANSCRIBE only what is VISIBLY WRITTEN in this image.
-
-# STRICT RULES:
-# - NEVER assume, infer, calculate, or fill in any value
-# - If a field is not clearly visible, set value to null
-# - If handwriting is unclear, set value to null — do NOT guess
-# - Do NOT calculate totals, dates, or any derived values
-# - Copy text EXACTLY as written — do not reformat dates/times unless specified
-# - If a field exists in the image but is unreadable, mark issue as "illegible"
-# - If a field is completely absent from the image, mark issue as "missing"
-# - Do NOT force the output into a fixed set of field names. Extract whatever fields/columns ACTUALLY appear in this specific image, using the labels/headers as shown (e.g. if the image has "Lunch Out", "Lunch In", "Total Hrs", "Project Code", etc., include those exact fields — do not skip them, and do not invent fields that aren't present).
-
-# CONFIDENCE RULES (be strict — when in doubt, go lower):
-# - 1.0 → printed text, perfectly clear
-# - 0.8 → handwritten but clearly legible
-# - 0.6 → legible but slightly unclear (thin ink, light pencil)
-# - 0.4 → partially readable, some characters uncertain
-# - 0.2 → mostly unreadable, heavy guess
-# - 0.0 → completely illegible or field not present
-
-# ISSUE TYPES (pick exactly one per field):
-# - "clear"           → value is fully readable, high confidence
-# - "illegible"       → text exists but cannot be read
-# - "ambiguous"       → could be one of multiple values (e.g. 1 vs l, 0 vs O)
-# - "missing"         → field not present in the image at all
-# - "cut_off"         → text exists but is partially outside image boundary
-# - "blurry"          → text exists but blur prevents clear reading
-# - "faded"           → ink/print is too light to read clearly
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STRUCTURE TO FOLLOW (field names inside each object are FLEXIBLE — use whatever labels appear in the image):
-
-# {
-#   "global_fields": {
-#     "<field_label_as_seen_in_image>": {
-#       "value": "EXACTLY AS WRITTEN or null",
-#       "confidence": 0.0,
-#       "issue": "clear|illegible|ambiguous|missing|cut_off|blurry|faded"
-#     }
-#     // repeat for every header-level / whole-sheet field visible
-#     // e.g. week_ending, client_name, pay_period, manager_name, location, etc.
-#     // — ONLY include fields that actually appear in the image
-#   },
-
-#   "employees": [
-#     {
-#       "employee_fields": {
-#         "<field_label_as_seen_in_image>": {
-#           "value": "EXACTLY AS WRITTEN or null",
-#           "confidence": 0.0,
-#           "issue": "..."
-#         }
-#         // e.g. employee_name, employee_id, role, department
-#         // — ONLY include fields that actually appear for this employee
-#       },
-#       "timesheet_rows": [
-#         {
-#           "<column_label_as_seen_in_image>": {
-#             "value": "EXACTLY AS WRITTEN or null",
-#             "confidence": 0.0,
-#             "issue": "..."
-#           }
-#           // repeat per column in the row, e.g. date, day, in, out,
-#           // lunch_in, lunch_out, total_hours, project_code, notes
-#           // — use the ACTUAL column headers from this image
-#         }
-#       ]
-#     }
-#   ]
-# }
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# RETURN ONLY VALID JSON. NO explanation. NO markdown. NO extra text.
-# """
-
-SYSTEM_PROMPT = """You are a timesheet data extractor from image. Your job is to READ and TRANSCRIBE only what is VISIBLY WRITTEN in this image.
-
-STRICT RULES:
-- NEVER assume, infer, calculate, or fill in any value
-- If a field is not clearly visible, set value to null
-- If handwriting is unclear, set value to null — do NOT guess
-- Do NOT calculate totals, dates, or any derived values
-- Copy text EXACTLY as written — do not reformat dates/times unless specified
-- If a field exists in the image but is unreadable, mark issue as "illegible"
-- If a field is completely absent from the image, mark issue as "missing"
-- Do NOT force the output into a fixed set of field names. Extract whatever fields/columns ACTUALLY appear in this specific image, using the labels/headers as shown (e.g. if the image has "Lunch Out", "Lunch In", "Total Hrs", "Project Code", etc., include those exact fields — do not skip them, and do not invent fields that aren't present).
-- All dates in this document use the DD/MM/YY format.
-
-CONFIDENCE RULES (be strict — when in doubt, go lower):
-- 1.0 → printed text, perfectly clear
-- 0.8 → handwritten but clearly legible
-- 0.6 → legible but slightly unclear (thin ink, light pencil)
-- 0.4 → partially readable, some characters uncertain
-- 0.2 → mostly unreadable, heavy guess
-- 0.0 → completely illegible or field not present
-
-ISSUE TYPES (pick exactly one per field):
-- "clear"           → value is fully readable, high confidence
-- "illegible"       → text exists but cannot be read
-- "ambiguous"       → could be one of multiple values (e.g. 1 vs l, 0 vs O)
-- "missing"         → field not present in the image at all
-- "cut_off"         → text exists but is partially outside image boundary
-- "blurry"          → text exists but blur prevents clear reading
-- "faded"           → ink/print is too light to read clearly
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT SHAPE — FLAT, TABLE-FRIENDLY:
-
-Instead of nesting global/employee/row data into separate levels, return ONE FLAT ARRAY called "rows" — one entry per timesheet line item. Each entry must contain:
-- All global fields (same values repeated on every row in the image).
-- All of that row's employee's specific fields (repeated on every row for that employee).
-- All columns for that specific row.
-
-For EVERY field in a row, output THREE flat keys instead of one nested object:
-- "<field_label>"             → the value, exactly as written, or null
-- "<field_label>__confidence" → the confidence score (0.0–1.0)
-- "<field_label>__issue"      → one of: clear | illegible | ambiguous | missing | cut_off | blurry | faded
-
-Use the EXACT field/column labels as they appear in the image (snake_case is not required here — preserve the label as seen, e.g. "Lunch Out" stays "lunch_out" only if that's the natural normalized form; do not invent fields that aren't present, and do not skip any that are).
-
-Also return, for reference / non-duplicated lookups:
-- "global_fields": deduplicated global metadata, each field as {"value", "confidence", "issue"} (nested form, since this is not a table).
-- "employees_meta": one entry per employee, containing ONLY their employee-specific fields as {"value", "confidence", "issue"} (nested form, no row data).
-
-Never drop a field from "rows" because it's global or employee-level — repeat it (value + confidence + issue) on every applicable row instead.
-
-STRUCTURE TO FOLLOW:
-
+### TASK
+Return structured data matching the canonical schema:
 {
-  "global_fields": {
-    "<field_label_as_seen_in_image>": {
-      "value": "EXACTLY AS WRITTEN or null",
-      "confidence": 0.0,
-      "issue": "clear|illegible|ambiguous|missing|cut_off|blurry|faded"
-    }
-    // ONLY include fields that actually appear in the image
+  "global_data": {
+    "client_name": "string or null",
+    "week_ending": "YYYY-MM-DD or null"
   },
-
-  "rows": [
+  "employee_records": [
     {
-      "<global_field_label>": "value",
-      "<global_field_label>__confidence": 0.0,
-      "<global_field_label>__issue": "clear",
-
-      "<employee_field_label>": "value",
-      "<employee_field_label>__confidence": 0.0,
-      "<employee_field_label>__issue": "clear",
-
-      "<row_column_label>": "value",
-      "<row_column_label>__confidence": 0.0,
-      "<row_column_label>__issue": "clear"
-      // repeat the value/__confidence/__issue triplet for every
-      // global field, every employee field, and every column
-      // actually present for this row
+      "employee_name": "string",
+      "department": "string or null",
+      "source": [{"file_name": "string", "content_type": "image"}],
+      "timesheet_records": [
+        {
+          "date": "YYYY-MM-DD or null",
+          "check_in": "HH:MM or null",
+          "check_out": "HH:MM or null",
+          "break_hour": "HH:MM or null",
+          "hours": "string or null",
+          "total_hours": "string or null",
+          "overtime_hours": "string or null",
+          "confidence": 0.00
+        }
+      ]
     }
   ]
 }
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RETURN ONLY VALID JSON. NO explanation. NO markdown. NO extra text."""
+Identify:
+1. Global Data - fields shared across all employees, such as Client Name, Company, Customer, Organization, Employer, Week Ending, Period Ending, Pay Period End, or Ending Date.
+2. Employee Records - group rows by employee. Include employee_name, department if visible, source, and a flat list of all daily/weekly records.
 
-# "employees_meta": [
-#   {
-#     "<field_label_as_seen_in_image>": {
-#       "value": "EXACTLY AS WRITTEN or null",
-#       "confidence": 0.0,
-#       "issue": "..."
-#     }
-#     // e.g. employee_name, employee_id, role, department
-#     // ONLY include fields that actually appear for this employee
-#   }
-# ],
+### VISUAL EXTRACTION RULES
+- Use only visible image evidence. Do not invent missing employees, dates, times, or hours.
+- If text is unreadable, unclear, cut off, blurry, or ambiguous, set the corresponding field to null.
+- Do not guess handwriting. Prefer null over a low-confidence guess.
+- If the image has no visible timesheet/hours data, return employee_records as an empty list and only fill global_data fields that are clearly visible.
+- Ignore fields that are completely unrecognized and do not map to a schema key, but never drop a row because some fields are unrecognized.
 
-USER_PROMPT = (
-    "Extract all timesheet data from the attached image. "
-    "Return ONLY the JSON array described in the system instructions."
-)
+### NORMALIZATION RULES
+- Global aliases: client_name = Client, Client Name, Customer, Company, Organization, Vendor, Employer. week_ending = Week Ending, Week End, WeekEnding, Week_End, Week Ending Date, Period Ending, Pay Period End, Ending Date.
+- Employee aliases: employee_name = Employee, Employee Name, Name. department = Department, Dept, Division, Business Unit, BU, Section.
+- Record aliases: check_in = In, In Time, Clock In, Start Time, Login, Punch In, in_time. check_out = Out, Out Time, Clock Out, End Time, Logout, Punch Out, out_time. break_hour = Break, Lunch, Meal Break, Break Time. hours = Hours, Worked Hours, Regular Hours. total_hours = Total Hours, Weekly Hours, Weekly Total. overtime_hours = OT, Overtime, OT Hours.
+
+### DATE RULES
+- Normalize all output dates to YYYY-MM-DD.
+- When parsing dates, try India format first: DD/MM/YYYY or DD/MM/YY. If that fails, try US format: MM/DD/YYYY or MM/DD/YY. Also handle ISO/textual dates when explicitly visible.
+- If no week ending is visible, set global_data.week_ending to null. Do not assume it.
+- Never output weekday names as dates. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
+- Example: if week_ending = 2026-06-28, Monday -> 2026-06-22, Tuesday -> 2026-06-23, Wednesday -> 2026-06-24, Thursday -> 2026-06-25, Friday -> 2026-06-26, Saturday -> 2026-06-27, Sunday -> 2026-06-28.
+- If a row only has a weekday name and week_ending is unknown, set date to null.
+
+### HOURS ROUTING
+- Use total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.
+- If an employee has exactly one row and that row contains no date or day field, treat its hours value as total_hours, set date to week_ending if known, and leave hours null.
+- Use hours only for daily row-level hours where a date or day is present.
+- Never populate both hours and total_hours in the same timesheet record.
+- If a source provides both a daily breakdown and a weekly total, keep the daily rows with hours and do not duplicate the weekly total into every daily row.
+
+### TIME AND CONFIDENCE
+- Normalize check_in, check_out, and break_hour to HH:MM when possible.
+- Keep hours, total_hours, and overtime_hours as strings.
+- Set each record's confidence to the minimum confidence across visible fields used for that record.
+- Confidence guide: 1.0 = perfectly clear printed text, 0.8 = clearly legible handwriting, 0.6 = legible but slightly unclear, 0.4 = partially readable, 0.2 = mostly unreadable. Use null for confidence only when no meaningful confidence can be assigned.
+
+### SOURCE
+- Every employee record must include source as a list with the exact source metadata from the user message:
+  [{"file_name": provided_file_name, "content_type": provided_content_type}]
+
+CRITICAL: Return only data matching the structured schema. No explanation, no markdown fences."""
+
+USER_PROMPT = "Extract all visible timesheet data from the attached image."
 
 
 def build_system_prompt() -> str:
     return SYSTEM_PROMPT
 
 
-def build_extraction_messages(media_type: str, image_base64: str) -> list[dict]:
-    """Single user turn with the image and a short extraction instruction."""
+def build_extraction_messages(
+    media_type: str,
+    image_base64: str,
+    *,
+    file_name: str | None = None,
+    content_type: str = "image",
+) -> list[dict]:
+    """Single user turn with source metadata, the image, and extraction instruction."""
+    source_text = (
+        "Source metadata:\n"
+        f"- file_name: {file_name or 'unknown'}\n"
+        f"- content_type: {content_type}\n\n"
+        f"{USER_PROMPT}"
+    )
     return [
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": USER_PROMPT},
+                {"type": "text", "text": source_text},
                 {
                     "type": "image_url",
                     "image_url": {

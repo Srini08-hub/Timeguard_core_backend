@@ -54,7 +54,13 @@ Never drop a row because some of its fields are unrecognized — extract all map
 
 ---
 
-## STEP 3 — CONVERT DAY NAMES TO DATES
+## STEP 3 — DATE PARSING AND CONVERSION
+
+### Date Format Priority
+When parsing dates (especially `week_ending` and individual dates), ALWAYS try these formats in order:
+1. **India format first:** DD/MM/YYYY or DD/MM/YY (e.g., 30/06/2026 or 30/06/26)
+
+### Convert Day Names to Dates
 **if there is no week ending in global fields then put week_ending as none don't assume it**
 Never output weekday names (Monday, Mon, MON, Tuesday, Tue, Wednesday, Wed, Thursday, Thu, Friday, Fri, Saturday, Sat, Sunday, Sun) in the final output.
 
@@ -171,12 +177,40 @@ Resolve `department` for each employee using this priority order:
 
 ## FINAL OUTPUT FORMAT
 
+Return a valid JSON object with this exact structure:
 
----
-Return a valid json
-Use the provided MergeResponse function to return the structured output. The function has these fields:
-- global_data: contains client_name and week_ending
-- employee_records: list of employee records with employee_name, department, source, and timesheet_records
+{
+  "global_data": {
+    "client_name": "string or null",
+    "week_ending": "string or null"
+  },
+  "employee_records": [
+    {
+      "employee_name": "string",
+      "department": "string or null",
+      "source": [
+        {
+          "file_name": "string",
+          "content_type": "string"
+        }
+      ],
+      "timesheet_records": [
+        {
+          "date": "YYYY-MM-DD or null",
+          "check_in": "HH:MM or null",
+          "check_out": "HH:MM or null",
+          "break_hour": "HH:MM or null",
+          "hours": "string or null",
+          "total_hours": "string or null",
+          "overtime_hours": "string or null",
+          "confidence": "number or null"
+        }
+      ]
+    }
+  ]
+}
+
+CRITICAL: Return ONLY the JSON object above. No conversational text, no explanations, no markdown fences. Your entire response must be this single JSON object and nothing else.
 
 """
 

@@ -48,6 +48,7 @@ target-version = "py313"
 "src/control/agents/image_extract_node/prompts.py" = ["E501"]
 "src/control/agents/scanned_pdf_extraction_node/prompts.py" = ["E501"]
 "src/control/agents/hybrid_pdf_extract_node/prompts.py" = ["E501"]
+"src/core/services/timecard_service.py" = ["E501"]
 "src/control/agents/merge_node/prompts.py" = ["E501"]
 "src/data/migrations/alembic/versions/*.py" = ["ALL"]
 
@@ -56,6 +57,7 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["B008"]
+
 
 
 [tool.mypy]

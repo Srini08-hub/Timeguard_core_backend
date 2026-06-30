@@ -189,6 +189,15 @@ def _validate_employee_record(employee: dict[str, Any]) -> list[ValidationFailur
         check_out = record.get("check_out")
         hours = _to_decimal(record.get("hours"))
         total_hours = _to_decimal(record.get("total_hours"))
+
+        # If hours not given but check_in and check_out are given, calculate and store hours
+        # if hours is None and total_hours is None and not
+        #  _is_missing(check_in) and not _is_missing(check_out):
+        #     calculated_hours = _duration_hours(check_in, check_out)
+        #     if calculated_hours is not None:
+        #         record["hours"] = str(calculated_hours)
+        #         hours = calculated_hours
+
         effective_hours = hours if hours is not None else None
         derived_hours = _duration_hours(check_in, check_out)
 
@@ -197,9 +206,9 @@ def _validate_employee_record(employee: dict[str, Any]) -> list[ValidationFailur
             or total_hours is not None
             or (not _is_missing(check_in) and not _is_missing(check_out))
         )
-        logger.info(
-            f"has_valid_time: {has_valid_time} ,check_in:{check_in} ,check_out:{check_out}"
-        )
+        # logger.info(
+        #     f"has_valid_time: {has_valid_time} ,check_in:{check_in} ,check_out:{check_out}"
+        # )
         if not has_valid_time:
             failures.append(
                 (ExceptionType.MISSING_TIME_ENTRY, ExceptionSeverity.MEDIUM, record)
@@ -312,14 +321,14 @@ async def validation_node(
     timesheet_repository = TimesheetRepository(db_session)
     email_repository = EmailRepository(db_session)
     timesheet = await timesheet_repository.get_by_email_id(email_id=email_id)
-    if timesheet is None or not isinstance(timesheet.enriched_payload, dict):
+    if timesheet is None or not isinstance(timesheet.payload, dict):
         logger.warning(
-            "Skipping validation because enriched payload is missing for email %s",
+            "Skipping validation because payload is missing for email %s",
             email_id,
         )
         return state
 
-    payload = timesheet.enriched_payload
+    payload = timesheet.payload
     employee_records = list(payload.get("employee_records") or [])
     week_ending = _week_ending_from_payload(payload, timesheet.week_ending)
 

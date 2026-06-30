@@ -32,6 +32,11 @@ class TimecardResponse(BaseModel):
     reg_hours: Decimal | None = None
     ot_hours: Decimal | None = None
     dt_hours: Decimal | None = None
+    pay_rate: Decimal | None = None
+    regular_pay: Decimal | None = None
+    ot_pay: Decimal | None = None
+    dt_pay: Decimal | None = None
+    gross_pay: Decimal | None = None
     status: str
     severity: str
     review_comment: str | None = None

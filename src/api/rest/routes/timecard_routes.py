@@ -1,6 +1,7 @@
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, Path, Query, Response, status
 
 from src.api.rest.dependency.services import get_timecard_service
 from src.core.services.timecard_service import TimecardService
@@ -23,6 +24,45 @@ async def get_timecards_by_timesheet(
     timecard_service: TimecardService = Depends(get_timecard_service),
 ) -> list[TimecardResponse]:
     return await timecard_service.get_timecards_by_timesheet(timesheet_id)
+
+
+@router.get(
+    "/approved/export",
+    status_code=status.HTTP_200_OK,
+)
+async def export_approved_timecards(
+    week_ending: date = Query(..., description="Week ending date"),
+    timecard_service: TimecardService = Depends(get_timecard_service),
+) -> Response:
+    content = await timecard_service.export_approved_timecards(week_ending)
+    filename = f"approved-timecards-{week_ending}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/approved",
+    response_model=list[TimecardResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def get_approved_timecards(
+    timecard_service: TimecardService = Depends(get_timecard_service),
+) -> list[TimecardResponse]:
+    return await timecard_service.get_approved_timecards()
+
+
+@router.get(
+    "/rejected",
+    response_model=list[TimecardResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def get_rejected_timecards(
+    timecard_service: TimecardService = Depends(get_timecard_service),
+) -> list[TimecardResponse]:
+    return await timecard_service.get_rejected_timecards()
 
 
 @router.patch(

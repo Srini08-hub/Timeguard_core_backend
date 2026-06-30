@@ -76,8 +76,8 @@ async def _resolve_client_and_department(
     state: TimeguardState,
     config: RunnableConfig,
 ) -> tuple[Client | None, Department | None]:
-    merged_result = state.get("merged_result") or {}
-    global_data = merged_result.get("global_data") or {}
+    payload = state.get("payload") or {}
+    global_data = payload.get("global_data") or {}
     client_name = (global_data.get("client_name") or "").strip() or None
     department_name = (global_data.get("department") or "").strip() or None
 
@@ -204,6 +204,34 @@ def _build_similarity_matrix(
     return matrix
 
 
+# def _calculate_hours_from_check_in_out(records: list[dict[str, Any]])
+# -> list[dict[str, Any]]:
+#     """Calculate hours from check_in and check_out if hours is not provided."""
+#     for record in records:
+#         timesheet_records = record.get("timesheet_records") or []
+#         if not isinstance(timesheet_records, list):
+#             continue
+
+#         for timesheet_record in timesheet_records:
+#             if not isinstance(timesheet_record, dict):
+#                 continue
+
+#             hours = _to_decimal(timesheet_record.get("hours"))
+#             total_hours = _to_decimal(timesheet_record.get("total_hours"))
+#             check_in = timesheet_record.get("check_in")
+#             check_out = timesheet_record.get("check_out")
+
+#             # If hours not given but check_in and check_out are given, calculate and store
+#  hours
+#             if hours is None and total_hours is None and not _is_missing(check_in)
+#  and not _is_missing(check_out):
+#                 calculated_hours = _duration_hours(check_in, check_out)
+#                 if calculated_hours is not None:
+#                     timesheet_record["hours"] = str(calculated_hours)
+
+#     return records
+
+
 def _match_employees(
     extracted_records: list[dict[str, Any]],
     candidates: list[dict[str, Any]],
@@ -264,27 +292,27 @@ async def employee_matching_node(
     state: TimeguardState,
     config: RunnableConfig,
 ) -> TimeguardState:
-    merged_result = state.get("merged_result")
-    if not isinstance(merged_result, dict):
-        logger.warning("Skipping employee matching because merged_result is missing")
+    payload = state.get("payload")
+    if not isinstance(payload, dict):
+        logger.warning("Skipping employee matching because payload is missing")
         return state
 
     try:
         # Validate week_ending is present
-        global_data = merged_result.get("global_data") or {}
+        global_data = payload.get("global_data") or {}
         week_ending = global_data.get("week_ending")
         if not week_ending:
-            raise ValueError("week_ending is not available in merged_result")
+            raise ValueError("week_ending is not available in payload")
 
         # Validate department is present
         department_name = global_data.get("department")
         if not department_name:
             # Check if department is available in employee records
-            employee_records = merged_result.get("employee_records") or []
+            employee_records = payload.get("employee_records") or []
             if employee_records and employee_records[0].get("department"):
                 department_name = employee_records[0].get("department")
             else:
-                raise ValueError("department is not available in merged_result")
+                raise ValueError("department is not available in payload")
 
         client, department = await _resolve_client_and_department(state, config)
 
@@ -301,24 +329,27 @@ async def employee_matching_node(
         db_session = get_db_session(config)
         candidates = await _get_candidate_employees(db_session, client, department)
 
-        global_data = dict(merged_result.get("global_data") or {})
+        global_data = dict(payload.get("global_data") or {})
         global_data["client_name"] = client.client_name
 
         if department is not None:
             global_data["department"] = department.department_name
 
         enriched_records = _match_employees(
-            list(merged_result.get("employee_records") or []),
+            list(payload.get("employee_records") or []),
             candidates,
         )
 
-        updated_merged_result = {
-            **merged_result,
+        # Calculate hours from check_in/check_out if hours is not provided
+        # enriched_records = _calculate_hours_from_check_in_out(enriched_records)
+
+        updated_payload = {
+            **payload,
             "global_data": global_data,
             "employee_records": enriched_records,
         }
 
-        # Store enriched_payload in timesheet table
+        # Store payload in timesheet table
 
         timesheet_repository = TimesheetRepository(db_session)
         email_id = state.get("email_id")
@@ -326,14 +357,14 @@ async def employee_matching_node(
             await timesheet_repository.update_timesheet(
                 email_id=email_id,
                 client_name=client.client_name,
-                enriched_payload=updated_merged_result,
+                payload=updated_payload,
                 status=TimesheetStatus.UNDER_REVIEW,
             )
         await db_session.commit()
         # Store result as JSON file for testing
         trace_path = store_llm_result_for_testing(
             source="employee_matching",
-            payload=updated_merged_result,
+            payload=updated_payload,
             extra={
                 "email_id": str(email_id),
             },
@@ -346,7 +377,7 @@ async def employee_matching_node(
             TimeguardState,
             {
                 **state,
-                "merged_result": updated_merged_result,
+                "payload": updated_payload,
             },
         )
 

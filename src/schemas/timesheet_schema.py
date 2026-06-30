@@ -10,7 +10,6 @@ class TimesheetResponse(BaseModel):
     email_id: UUID
     client_name: str | None = None
     week_ending: date | None = None
-    merged_payload: dict[str, Any] | None = None
-    enriched_payload: dict[str, Any] | None = None
+    payload: dict[str, Any] | None = None
     status: str | None = None
     created_at: datetime | None = None

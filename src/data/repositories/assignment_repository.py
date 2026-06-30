@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -17,10 +18,19 @@ class AssignmentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def create(self, emp_id: UUID, client_id: UUID, department_id: UUID) -> Assignment:
+    async def create(
+        self,
+        emp_id: UUID,
+        client_id: UUID,
+        department_id: UUID,
+        pay_rate: Decimal,
+    ) -> Assignment:
         try:
             assignment = Assignment(
-                emp_id=emp_id, client_id=client_id, department_id=department_id
+                emp_id=emp_id,
+                client_id=client_id,
+                department_id=department_id,
+                pay_rate=pay_rate,
             )
             self._session.add(assignment)
 
@@ -94,9 +104,18 @@ class AssignmentRepository:
         except SQLAlchemyError as err:
             raise DatabaseException("Failed to update assignments by department") from err
 
-    async def update(self, assignment: Assignment, *, status: AssignmentStatus) -> Assignment:
+    async def update(
+        self,
+        assignment: Assignment,
+        *,
+        status: AssignmentStatus | None = None,
+        pay_rate: Decimal | None = None,
+    ) -> Assignment:
         try:
-            assignment.status = status
+            if status is not None:
+                assignment.status = status
+            if pay_rate is not None:
+                assignment.pay_rate = pay_rate
             await self._session.flush()
             return assignment
         except SQLAlchemyError as err:
