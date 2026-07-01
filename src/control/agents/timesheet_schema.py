@@ -13,7 +13,6 @@ class TimesheetRecord(BaseModel):
     check_out: str | None = Field(default=None, description="Check-out time in HH:MM format")
     break_hour: str | None = Field(default=None, description="Break time in HH:MM format")
     hours: str | None = Field(default=None, description="Daily Hours worked")
-    total_hours: str | None = Field(default=None, description="Total Hours worked")
     overtime_hours: str | None = Field(default=None, description="Overtime hours")
     confidence: float | None = Field(default=None, description="Confidence score")
 
@@ -40,6 +39,7 @@ class EmployeeRecord(BaseModel):
 
     employee_name: str = Field(description="Employee name")
     department: str | None = Field(default=None, description="Department")
+    total_hours: str | None = Field(default=None, description="Total Hours worked")
     source: list[SourceInfo] = Field(description="Source information")
     timesheet_records: list[TimesheetRecord] = Field(description="Timesheet records")
 
@@ -49,6 +49,7 @@ class GlobalData(BaseModel):
 
     client_name: str | None = Field(default=None, description="Client name")
     week_ending: str | None = Field(default=None, description="Week ending date")
+    department: str | None = Field(default=None, description="Department")
 
 
 class MergeResponse(BaseModel):

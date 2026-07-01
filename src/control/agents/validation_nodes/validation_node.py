@@ -96,9 +96,6 @@ def _record_hours(record: dict[str, Any]) -> Decimal | None:
     hours = _to_decimal(record.get("hours"))
     if hours is not None:
         return hours
-    total_hours = _to_decimal(record.get("total_hours"))
-    if total_hours is not None:
-        return total_hours
     return _duration_hours(record.get("check_in"), record.get("check_out"))
 
 
@@ -174,6 +171,7 @@ def _max_severity(severities: list[ExceptionSeverity]) -> ExceptionSeverity:
 def _validate_employee_record(employee: dict[str, Any]) -> list[ValidationFailure]:
     failures: list[ValidationFailure] = []
     records = list(employee.get("timesheet_records") or [])
+    employee_total_hours = _to_decimal(employee.get("total_hours"))
 
     if _is_missing(employee.get("emp_id")):
         failures.append((ExceptionType.MISSING_EMPLOYEE_ID, ExceptionSeverity.HIGH, {}))
@@ -188,11 +186,11 @@ def _validate_employee_record(employee: dict[str, Any]) -> list[ValidationFailur
         check_in = record.get("check_in")
         check_out = record.get("check_out")
         hours = _to_decimal(record.get("hours"))
-        total_hours = _to_decimal(record.get("total_hours"))
+        has_check_in = not _is_missing(check_in)
+        has_check_out = not _is_missing(check_out)
 
         # If hours not given but check_in and check_out are given, calculate and store hours
-        # if hours is None and total_hours is None and not
-        #  _is_missing(check_in) and not _is_missing(check_out):
+        # if hours is None and not _is_missing(check_in) and not _is_missing(check_out):
         #     calculated_hours = _duration_hours(check_in, check_out)
         #     if calculated_hours is not None:
         #         record["hours"] = str(calculated_hours)
@@ -201,18 +199,22 @@ def _validate_employee_record(employee: dict[str, Any]) -> list[ValidationFailur
         effective_hours = hours if hours is not None else None
         derived_hours = _duration_hours(check_in, check_out)
 
-        has_valid_time = (
-            hours is not None
-            or total_hours is not None
-            or (not _is_missing(check_in) and not _is_missing(check_out))
-        )
-        # logger.info(
-        #     f"has_valid_time: {has_valid_time} ,check_in:{check_in} ,check_out:{check_out}"
+        # has_valid_time = (
+        #     hours is not None
+        #     or employee_total_hours is not None
+        #     or (has_check_in and has_check_out)
         # )
-        if not has_valid_time:
+        if has_check_in ^ has_check_out:
             failures.append(
                 (ExceptionType.MISSING_TIME_ENTRY, ExceptionSeverity.MEDIUM, record)
             )
+        # logger.info(
+        #     f"has_valid_time: {has_valid_time} ,check_in:{check_in} ,check_out:{check_out}"
+        # )
+        # if not has_valid_time:
+        #     failures.append(
+        #         (ExceptionType.MISSING_TIME_ENTRY, ExceptionSeverity.MEDIUM, record)
+        #     )
 
         confidence = _to_decimal(record.get("confidence"))
         if confidence is not None and Decimal("0") < confidence <= Decimal("0.6"):
@@ -235,9 +237,15 @@ def _validate_employee_record(employee: dict[str, Any]) -> list[ValidationFailur
                 failures.append(
                     (ExceptionType.HOURS_EXCEED_LIMIT, ExceptionSeverity.HIGH, record)
                 )
-
+    if weekly_total == Decimal("0") and employee_total_hours is not None:
+        weekly_total = employee_total_hours
+    if (
+        employee_total_hours is not None
+        and abs(employee_total_hours - weekly_total) > DURATION_TOLERANCE_HOURS
+    ):
+        failures.append((ExceptionType.TIME_ENTRY_CONFLICT, ExceptionSeverity.MEDIUM, None))
     if weekly_total > WEEKLY_HOURS_LIMIT or (
-        total_hours is not None and total_hours > WEEKLY_HOURS_LIMIT
+        employee_total_hours is not None and employee_total_hours > WEEKLY_HOURS_LIMIT
     ):
         failures.append(
             (ExceptionType.WEEKLY_HOURS_EXCEED_LIMIT, ExceptionSeverity.HIGH, None)
@@ -297,13 +305,30 @@ def _payable_weekly_hours(
     rule: ClientRule | None,
 ) -> Decimal:
     total = Decimal("0")
+    has_row_hours = False
     for record in list(employee.get("timesheet_records") or []):
         hours = _record_hours(record)
         if hours is None:
             continue
+        has_row_hours = True
         break_hours = _record_break_hours(record, rule)
         total += max(Decimal("0"), hours - break_hours)
-    return total.quantize(Decimal("0.01"))
+
+    if has_row_hours:
+        return total.quantize(Decimal("0.01"))
+
+    employee_total_hours = _to_decimal(employee.get("total_hours"))
+    if employee_total_hours is None:
+        return total.quantize(Decimal("0.01"))
+
+    if rule is not None and rule.break_auto_deduct and rule.break_deduction_hrs is not None:
+        break_hours = Decimal(rule.break_deduction_hrs) * Decimal("5")
+        employee_total_hours = max(Decimal("0"), employee_total_hours - break_hours)
+    logger.info(
+        f"Employee {employee.get('employee_name')} has no row-level hours,"
+        f" using total_hours={employee_total_hours}"
+    )
+    return employee_total_hours.quantize(Decimal("0.01"))
 
 
 async def validation_node(

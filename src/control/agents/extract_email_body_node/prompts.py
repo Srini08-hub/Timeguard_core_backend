@@ -13,12 +13,14 @@ Return structured data matching the canonical schema:
 {
   "global_data": {
     "client_name": "string or null",
-    "week_ending": "YYYY-MM-DD or null"
+    "week_ending": "YYYY-MM-DD or null",
+    "department": "string or null"
   },
   "employee_records": [
     {
       "employee_name": "string",
       "department": "string or null",
+      "total_hours": "string or null",
       "source": [{"file_name": "string", "content_type": "email"}],
       "timesheet_records": [
         {
@@ -27,7 +29,6 @@ Return structured data matching the canonical schema:
           "check_out": "HH:MM or null",
           "break_hour": "HH:MM or null",
           "hours": "string or null",
-          "total_hours": "string or null",
           "overtime_hours": "string or null",
           "confidence": 0.00
         }
@@ -37,7 +38,7 @@ Return structured data matching the canonical schema:
 }
 
 Identify:
-1. Global Data - fields shared across all employees, such as Client Name, Company, Customer, Organization, Employer, Week Ending, Period Ending, Pay Period End, or Ending Date.
+1. Global Data - fields shared across all employees, such as Client Name, Company, Customer, Organization, Employer, Week Ending, Period Ending, Pay Period End, Ending Date, or Department.
 2. Employee Records - group rows by employee. Include employee_name, department if present, source, and a flat list of all daily/weekly records.
 
 ### STRICT EXTRACTION RULES
@@ -48,7 +49,7 @@ Identify:
 - Ignore fields that are completely unrecognized and do not map to a schema key, but never drop a row because some fields are unrecognized.
 
 ### NORMALIZATION RULES
-- Global aliases: client_name = Client, Client Name, Customer, Company, Organization, Vendor, Employer. week_ending = Week Ending, Week End, WeekEnding, Week_End, Week Ending Date, Period Ending, Pay Period End, Ending Date.
+- Global aliases: client_name = Client, Client Name, Customer, Company, Organization, Vendor, Employer. week_ending = Week Ending, Week End, WeekEnding, Week_End, Week Ending Date, Period Ending, Pay Period End, Ending Date. department = Department, Dept, Division, Business Unit, BU, Section.
 - Employee aliases: employee_name = Employee, Employee Name, Name. department = Department, Dept, Division, Business Unit, BU, Section.
 - Record aliases: check_in = In, In Time, Clock In, Start Time, Login, Punch In, in_time. check_out = Out, Out Time, Clock Out, End Time, Logout, Punch Out, out_time. break_hour = Break, Lunch, Meal Break, Break Time. hours = Hours, Worked Hours, Regular Hours. total_hours = Total Hours, Weekly Hours, Weekly Total. overtime_hours = OT, Overtime, OT Hours.
 
@@ -67,15 +68,15 @@ Identify:
 - If a row only has a weekday name and week_ending is unknown, set date to null.
 
 ### HOURS ROUTING
-- Use total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.
-- If an employee has exactly one row and that row contains no date or day field, treat its hours value as total_hours, set date to week_ending if known, and leave hours null.
+- Use employee-level total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.
+- If an employee has exactly one row and that row contains no date or day field, treat its hours value as employee total_hours, set date to week_ending if known, and leave hours null.
 - Use hours only for daily row-level hours where a date or day is present.
-- Never populate both hours and total_hours in the same timesheet record.
+- Never populate total_hours inside timesheet_records.
 - If a source provides both a daily breakdown and a weekly total, keep the daily rows with hours and do not duplicate the weekly total into every daily row.
 
 ### TIME AND CONFIDENCE
 - Normalize check_in, check_out, and break_hour to HH:MM when possible.
-- Keep hours, total_hours, and overtime_hours as strings.
+- Keep total_hours on the employee record and hours/overtime_hours as strings.
 - If confidence values are explicitly available, set each record's confidence to the minimum confidence across available fields in that record. Otherwise leave confidence null.
 
 ### SOURCE
@@ -97,10 +98,11 @@ Output:
       {
         "employee_name": "John Smith",
         "department": null,
+        "total_hours": null,
         "source": [{"file_name": "email", "content_type": "email"}],
         "timesheet_records": [
-          {"date": "2026-06-22", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "total_hours": null, "overtime_hours": null, "confidence": null},
-          {"date": "2026-06-23", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "total_hours": null, "overtime_hours": null, "confidence": null}
+          {"date": "2026-06-22", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null},
+          {"date": "2026-06-23", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null}
         ]
       }
     ]
