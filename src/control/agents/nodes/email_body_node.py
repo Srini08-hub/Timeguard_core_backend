@@ -47,7 +47,7 @@ ANCHOR_KEYWORDS = [
 ]
 FUZZY_THRESHOLD = 88
 CONTEXT_CHARS = 300
-SHORT_BODY_CHAR_THRESHOLD = 500
+SHORT_BODY_CHAR_THRESHOLD = 50
 
 
 class EmailBodyClassification(StrEnum):
@@ -361,12 +361,24 @@ async def email_body_node(
             should_mark_email_timesheet,
         )
 
+    # Create body content_extract if any attachment is timesheet, or if no attachments and
+    #  body is timesheet
+    has_timesheet_attachments = any(_attachment_is_timesheet(a) for a in attachments)
+    should_create_body_extract = (
+        has_timesheet_attachments or not attachments
+    ) and not llm_failed
+    body_is_timesheet_for_extract = (
+        classification == EmailBodyClassification.TIMESHEET
+        if not has_timesheet_attachments
+        else True
+    )
+
     email_body_content_extract_id, updated_attachments = await _create_content_extract_records(
         state,
         config,
-        body_is_timesheet=classification == EmailBodyClassification.TIMESHEET,
+        body_is_timesheet=body_is_timesheet_for_extract,
         attachments=attachments,
-        should_create_records=should_mark_email_timesheet and not llm_failed,
+        should_create_records=should_create_body_extract,
     )
 
     result = {

@@ -23,6 +23,7 @@ Return structured data matching the canonical schema:
     {
       "employee_name": "string",
       "department": "string or null",
+      "total_hours": "string or null",
       "source": [{"file_name": "string", "content_type": "pdf"}],
       "timesheet_records": [
         {
@@ -31,7 +32,6 @@ Return structured data matching the canonical schema:
           "check_out": "HH:MM or null",
           "break_hour": "HH:MM or null",
           "hours": "string or null",
-          "total_hours": "string or null",
           "overtime_hours": "string or null",
           "confidence": 0.00
         }
@@ -71,15 +71,15 @@ Strip markdown structural noise such as "## Page 1", table separator lines, repe
 - If a row only has a weekday name and week_ending is unknown, set date to null.
 
 ### HOURS ROUTING
-- Use total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.
-- If an employee has exactly one row and that row contains no date or day field, treat its hours value as total_hours, set date to week_ending if known, and leave hours null.
+- Use employee-level total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.
+- If an employee has exactly one row and that row contains no date or day field, treat its hours value as employee total_hours, set date to week_ending if known, and leave hours null.
 - Use hours only for daily row-level hours where a date or day is present.
-- Never populate both hours and total_hours in the same timesheet record.
+- Never populate total_hours inside timesheet_records.
 - If a source provides both a daily breakdown and a weekly total, keep the daily rows with hours and do not duplicate the weekly total into every daily row.
 
 ### TIME AND CONFIDENCE
 - Normalize check_in, check_out, and break_hour to HH:MM when possible.
-- Keep hours, total_hours, and overtime_hours as strings.
+- Keep total_hours on the employee record and hours/overtime_hours as strings.
 - If confidence values are explicitly available, set each record's confidence to the minimum confidence across available fields in that record. Otherwise leave confidence null.
 
 ### SOURCE

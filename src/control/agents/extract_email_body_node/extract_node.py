@@ -52,7 +52,7 @@ def _extract_structured(
 ) -> MergeResponse:
     llm = ChatGroq(
         model_name=MODEL_NAME,
-        api_key=settings.GROQ_API_KEY_2,
+        api_key=settings.GROQ_API_KEY_1,
         temperature=0,
         max_tokens=4096,
     )
@@ -83,17 +83,18 @@ def _extract_structured(
                 exc,
             )
             if attempt <= max_retries:
-                thread = thread + [
-                    {
-                        "role": "user",
-                        "content": (
-                            "The previous structured extraction failed with this error:\n\n"
-                            f"{last_error}\n\n"
-                            "Fix only that issue and return data matching the "
-                            "structured schema."
-                        ),
-                    }
-                ]
+                continue
+                # thread = thread + [
+                #     {
+                #         "role": "user",
+                #         "content": (
+                #             "The previous structured extraction failed with this error:\n\n"
+                #             f"{last_error}\n\n"
+                #             "Fix only that issue and return data matching the "
+                #             "structured schema."
+                #         ),
+                #     }
+                # ]
 
     raise ExtractionError(
         message=(

@@ -1,6 +1,7 @@
 """Merge node for consolidating extracted timesheet data from multiple sources."""
 
 import logging
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
@@ -9,15 +10,27 @@ from langchain_core.runnables import RunnableConfig
 
 from src.control.agents.graph_config import get_db_session
 from src.control.agents.state import TimeguardState
-from src.control.agents.timesheet_schema import EmployeeRecord, MergeResponse
+from src.control.agents.timesheet_schema import MergeResponse
 from src.data.models.email import EmailStatus
 from src.data.repositories.content_extract_repository import ContentExtractRepository
 from src.data.repositories.email_repository import EmailRepository
 from src.data.repositories.timesheet_repository import TimesheetRepository
 from src.llm_trace_debug import store_llm_result_for_testing
 
+# LLM merge imports preserved for the commented implementation below:
+# import json
+# from langchain_core.messages import HumanMessage, SystemMessage
+# from langchain_groq import ChatGroq
+# from src.config.settings import settings
+# from src.control.agents.merge_node.prompts import (
+#     build_merge_messages,
+#     build_system_prompt,
+# )
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# MAX_MERGE_RETRIES = 2
 
 DATE_FORMATS = [
     "%Y-%m-%d",
@@ -29,13 +42,6 @@ DATE_FORMATS = [
 
 def _is_missing(value: Any) -> bool:
     return value is None or value == ""
-
-
-def _non_empty_text(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
 
 
 def _to_decimal(value: Any) -> Decimal | None:
@@ -83,19 +89,71 @@ def _calculate_hours_from_check_in_out(records: list[dict[str, Any]]) -> list[di
                 continue
 
             hours = _to_decimal(timesheet_record.get("hours"))
-            total_hours = _to_decimal(timesheet_record.get("total_hours"))
             check_in = timesheet_record.get("check_in")
             check_out = timesheet_record.get("check_out")
+            derived_hours = _duration_hours(check_in, check_out)
+
+            if hours is None and derived_hours is not None:
+                timesheet_record["hours"] = str(derived_hours)
+                continue
 
             if (
-                hours is None
-                and total_hours is None
-                and not _is_missing(check_in)
-                and not _is_missing(check_out)
+                hours is not None
+                and derived_hours is not None
+                and abs(hours - derived_hours) > Decimal("0.05")
             ):
-                calculated_hours = _duration_hours(check_in, check_out)
-                if calculated_hours is not None:
-                    timesheet_record["hours"] = str(calculated_hours)
+                logger.warning(
+                    "Hour conflict detected for employee %s on %s: hours=%s derived=%s",
+                    record.get("employee_name", "unknown"),
+                    timesheet_record.get("date", "unknown"),
+                    hours,
+                    derived_hours,
+                )
+
+    return records
+
+
+_WEEKDAY_OFFSETS = {
+    "monday": -6,
+    "mon": -6,
+    "tuesday": -5,
+    "tue": -5,
+    "wednesday": -4,
+    "wed": -4,
+    "thursday": -3,
+    "thu": -3,
+    "friday": -2,
+    "fri": -2,
+    "saturday": -1,
+    "sat": -1,
+    "sunday": 0,
+    "sun": 0,
+}
+
+
+def _normalize_weekday_dates(
+    records: list[dict[str, Any]],
+    week_ending: Any,
+) -> list[dict[str, Any]]:
+    """Convert weekday date labels to YYYY-MM-DD using week ending as Sunday."""
+    for employee_record in records:
+        timesheet_records = employee_record.get("timesheet_records") or []
+        if not isinstance(timesheet_records, list):
+            continue
+
+        for timesheet_record in timesheet_records:
+            if not isinstance(timesheet_record, dict):
+                continue
+            date_value = timesheet_record.get("date")
+            if not isinstance(date_value, str):
+                continue
+            weekday_offset = _WEEKDAY_OFFSETS.get(date_value.strip().casefold())
+            if weekday_offset is None:
+                continue
+            if week_ending is None:
+                timesheet_record["date"] = None
+            else:
+                timesheet_record["date"] = str(week_ending + timedelta(days=weekday_offset))
 
     return records
 
@@ -108,7 +166,7 @@ def _is_merge_response_payload(value: Any) -> bool:
     )
 
 
-def _iter_raw_merge_payloads(payload: Any) -> Any:
+def _iter_raw_merge_payloads(payload: Any) -> Iterator[dict[str, Any]]:
     """Yield raw MergeResponse-shaped dicts from persisted extractor payloads."""
     if payload is None:
         return
@@ -129,16 +187,20 @@ def _iter_raw_merge_payloads(payload: Any) -> Any:
     if extraction is not None:
         yield from _iter_raw_merge_payloads(extraction)
 
+    trace_payload = payload.get("payload")
+    if trace_payload is not None:
+        yield from _iter_raw_merge_payloads(trace_payload)
 
-def _load_extracted_merge_responses(
+
+def _load_extracted_merge_payloads(
     extracted_data: list[dict[str, Any]],
-) -> list[MergeResponse]:
-    responses: list[MergeResponse] = []
+) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
     for source_index, source in enumerate(extracted_data, start=1):
         payload = source.get("extracted_payload")
         for raw_payload in _iter_raw_merge_payloads(payload):
             try:
-                responses.append(MergeResponse.model_validate(raw_payload))
+                payloads.append(MergeResponse.model_validate(raw_payload).model_dump())
             except Exception as exc:
                 logger.warning(
                     "Skipping invalid extracted payload from source %d (%s): %s",
@@ -146,75 +208,188 @@ def _load_extracted_merge_responses(
                     source.get("attachment_name", "unknown"),
                     exc,
                 )
-    return responses
+    return payloads
 
 
-def _employee_key(employee_name: str) -> str:
-    return employee_name.strip().casefold()
+def _first_present(current: Any, incoming: Any) -> Any:
+    if not _is_missing(current):
+        return current
+    if _is_missing(incoming):
+        return current
+    return incoming
+
+
+def _employee_key(employee_name: Any) -> str:
+    return " ".join(str(employee_name or "").casefold().split())
 
 
 def _merge_source_lists(
     existing: list[dict[str, Any]],
     incoming: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    seen = {(source.get("file_name"), source.get("content_type")) for source in existing}
+    seen = {
+        (
+            str(source.get("file_name") or ""),
+            str(source.get("content_type") or ""),
+        )
+        for source in existing
+        if isinstance(source, dict)
+    }
     for source in incoming:
-        key = (source.get("file_name"), source.get("content_type"))
-        if key not in seen:
-            existing.append(source)
-            seen.add(key)
+        if not isinstance(source, dict):
+            continue
+        key = (
+            str(source.get("file_name") or ""),
+            str(source.get("content_type") or ""),
+        )
+        if key in seen:
+            continue
+        existing.append(source)
+        seen.add(key)
     return existing
 
 
-def _merge_employee_record(
-    merged_employee: dict[str, Any],
-    incoming_employee: EmployeeRecord,
-) -> None:
-    incoming = incoming_employee.model_dump()
-
-    if not _non_empty_text(merged_employee.get("department")):
-        department = _non_empty_text(incoming.get("department"))
-        if department:
-            merged_employee["department"] = department
-
-    merged_employee["source"] = _merge_source_lists(
-        merged_employee.get("source") or [],
-        incoming.get("source") or [],
-    )
-    merged_employee.setdefault("timesheet_records", []).extend(
-        incoming.get("timesheet_records") or []
-    )
-
-
-def _combine_merge_responses(responses: list[MergeResponse]) -> dict[str, Any]:
-    combined_global_data: dict[str, Any] = {
-        "client_name": None,
-        "week_ending": None,
+def _combine_merge_payloads(extracted_payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    combined: dict[str, Any] = {
+        "global_data": {
+            "client_name": None,
+            "week_ending": None,
+            "department": None,
+        },
+        "employee_records": [],
     }
-    employees_by_name: dict[str, dict[str, Any]] = {}
+    employees_by_key: dict[str, dict[str, Any]] = {}
 
-    for response in responses:
-        global_data = response.global_data.model_dump()
-        if not _non_empty_text(combined_global_data.get("client_name")):
-            combined_global_data["client_name"] = _non_empty_text(
-                global_data.get("client_name")
-            )
-        if not _non_empty_text(combined_global_data.get("week_ending")):
-            combined_global_data["week_ending"] = _non_empty_text(
-                global_data.get("week_ending")
-            )
+    for payload in extracted_payloads:
+        global_data = payload.get("global_data") or {}
+        combined_global_data = combined["global_data"]
+        combined_global_data["client_name"] = _first_present(
+            combined_global_data.get("client_name"),
+            global_data.get("client_name"),
+        )
+        combined_global_data["week_ending"] = _first_present(
+            combined_global_data.get("week_ending"),
+            global_data.get("week_ending"),
+        )
+        combined_global_data["department"] = _first_present(
+            combined_global_data.get("department"),
+            global_data.get("department"),
+        )
 
-        for employee in response.employee_records:
-            key = _employee_key(employee.employee_name)
-            if key not in employees_by_name:
-                employees_by_name[key] = employee.model_dump()
+        for employee_record in payload.get("employee_records") or []:
+            employee_name = employee_record.get("employee_name")
+            key = _employee_key(employee_name)
+            if not key:
                 continue
-            _merge_employee_record(employees_by_name[key], employee)
 
-    return {
-        "global_data": combined_global_data,
-        "employee_records": list(employees_by_name.values()),
-    }
+            if key not in employees_by_key:
+                employees_by_key[key] = {
+                    "employee_name": employee_name,
+                    "department": employee_record.get("department"),
+                    "total_hours": employee_record.get("total_hours"),
+                    "source": list(employee_record.get("source") or []),
+                    "timesheet_records": list(employee_record.get("timesheet_records") or []),
+                }
+                continue
+
+            existing = employees_by_key[key]
+            existing["department"] = _first_present(
+                existing.get("department"),
+                employee_record.get("department"),
+            )
+            existing["total_hours"] = _first_present(
+                existing.get("total_hours"),
+                employee_record.get("total_hours"),
+            )
+            existing["source"] = _merge_source_lists(
+                existing.get("source") or [],
+                list(employee_record.get("source") or []),
+            )
+            existing_timesheet_records = existing.get("timesheet_records") or []
+            existing_timesheet_records.extend(
+                list(employee_record.get("timesheet_records") or [])
+            )
+            existing["timesheet_records"] = existing_timesheet_records
+
+    global_department = combined["global_data"].get("department")
+    if not _is_missing(global_department):
+        for employee_record in employees_by_key.values():
+            if _is_missing(employee_record.get("department")):
+                employee_record["department"] = global_department
+
+    combined["employee_records"] = list(employees_by_key.values())
+    return MergeResponse.model_validate(combined).model_dump()
+
+
+# LLM merge implementation preserved for reference. It is intentionally not active
+# because merge is currently deterministic.
+#
+# def _strip_json_fences(text: str) -> str:
+#     cleaned = text.strip()
+#     if cleaned.startswith("```"):
+#         lines = cleaned.splitlines()
+#         if lines and lines[0].startswith("```"):
+#             lines = lines[1:]
+#         if lines and lines[-1].strip().startswith("```"):
+#             lines = lines[:-1]
+#         cleaned = "\n".join(lines).strip()
+#     return cleaned
+#
+#
+# def _parse_merge_response(raw_response: str) -> MergeResponse:
+#     parsed = json.loads(_strip_json_fences(raw_response))
+#     return MergeResponse.model_validate(parsed)
+#
+#
+# def _merge_with_llm(extracted_payloads: list[dict[str, Any]]) -> dict[str, Any]:
+#     system_prompt = build_system_prompt()
+#     messages = build_merge_messages(extracted_payloads)
+#     llm = ChatGroq(
+#         model_name="llama-3.3-70b-versatile",
+#         temperature=0,
+#         api_key=settings.GROQ_API_KEY_2,
+#     ).bind(response_format={"type": "json_object"})
+#     thread = [
+#         SystemMessage(content=system_prompt),
+#         HumanMessage(content=messages[0]["content"]),
+#     ]
+#     last_error = ""
+#
+#     for attempt in range(1, MAX_MERGE_RETRIES + 2):
+#         raw_response = ""
+#         try:
+#             response = llm.invoke(thread)
+#             content = response.content
+#             raw_response = content if isinstance(content, str) else str(content)
+#             return _parse_merge_response(raw_response).model_dump()
+#         except Exception as exc:
+#             last_error = str(exc)
+#             logger.warning(
+#                 "Merge LLM attempt %d/%d failed: %s",
+#                 attempt,
+#                 MAX_MERGE_RETRIES + 1,
+#                 exc,
+#             )
+#             if attempt <= MAX_MERGE_RETRIES:
+#                 thread.append(
+#                     HumanMessage(
+#                         content=(
+#                             "The previous merge response failed JSON/schema validation "
+#                             f"with this error:\n\n{last_error}\n\n"
+#                             "Return ONLY a valid JSON object with top-level "
+#                             "global_data and employee_records. Do not put "
+#                             "global_data inside employee_records. Do not include "
+#                             "weekday names such as Monday in date; use YYYY-MM-DD "
+#                             "when week_ending is known, otherwise null. Every item "
+#                             "in employee_records must have employee_name, source, "
+#                             "and timesheet_records."
+#                         )
+#                     )
+#                 )
+#                 if raw_response:
+#                     thread.append(HumanMessage(content=f"Bad response was:\n{raw_response}"))
+#
+#     raise ValueError(f"Merge LLM failed after retries: {last_error}")
 
 
 async def merge_node(
@@ -249,11 +424,11 @@ async def merge_node(
         return state
 
     try:
-        merge_responses = _load_extracted_merge_responses(extracted_data)
-        if not merge_responses:
+        extracted_payloads = _load_extracted_merge_payloads(extracted_data)
+        if not extracted_payloads:
             raise ValueError("No structured extraction payloads available for merge")
 
-        payload = _combine_merge_responses(merge_responses)
+        payload = _combine_merge_payloads(extracted_payloads)
 
         # Step 3: Store result as JSON file for testing
         trace_path = store_llm_result_for_testing(
@@ -262,7 +437,7 @@ async def merge_node(
             extra={
                 "email_id": str(email_id),
                 "source_count": len(extracted_data),
-                "structured_payload_count": len(merge_responses),
+                "structured_payload_count": len(extracted_payloads),
             },
         )
         logger.info("Stored merge result for testing at %s", trace_path)
@@ -290,6 +465,10 @@ async def merge_node(
                 email_id,
             )
             raise ValueError("week_ending is not available in payload")
+        payload["employee_records"] = _normalize_weekday_dates(
+            payload.get("employee_records", []),
+            week_ending,
+        )
         payload["employee_records"] = _calculate_hours_from_check_in_out(
             payload.get("employee_records", [])
         )
@@ -323,7 +502,7 @@ async def merge_node(
 
         logger.info(
             "Successfully merged %d structured payload(s) from %d sources for email %s",
-            len(merge_responses),
+            len(extracted_payloads),
             len(extracted_data),
             email_id,
         )
