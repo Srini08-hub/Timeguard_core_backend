@@ -77,6 +77,18 @@ async def approve_timecards(
     return await timecard_service.approve_timecards(payload.timecard_ids)
 
 
+@router.patch(
+    "/bulk/reject",
+    response_model=list[TimecardResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def reject_timecards(
+    payload: TimecardBulkAction,
+    timecard_service: TimecardService = Depends(get_timecard_service),
+) -> list[TimecardResponse]:
+    return await timecard_service.reject_timecards(payload.timecard_ids)
+
+
 @router.get(
     "/{timecard_id}",
     response_model=TimecardResponse,

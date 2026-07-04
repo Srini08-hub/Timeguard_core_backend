@@ -11,6 +11,7 @@ from src.api.rest.routes.content_extract_rotues import router as content_extract
 from src.api.rest.routes.department_routes import router as department_router
 from src.api.rest.routes.email_routes import router as email_router
 from src.api.rest.routes.employee_rotues import router as employee_router
+from src.api.rest.routes.health_routes import router as health_router
 from src.api.rest.routes.polling_routes import router as polling_router
 from src.api.rest.routes.timecard_routes import router as timecard_router
 from src.api.rest.routes.timesheet_routes import router as timesheet_router
@@ -52,4 +53,5 @@ def get_app() -> FastAPI:
     app.include_router(assignment_router)
     app.include_router(content_extract_router)
     app.include_router(polling_router)
+    app.include_router(health_router)
     return app
