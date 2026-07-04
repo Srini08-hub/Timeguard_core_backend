@@ -7,12 +7,9 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
 
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
-
-from src.config.settings import settings
 
 if TYPE_CHECKING:
     from src.control.agents.state import AttachmentState, TimeguardState
@@ -20,9 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("timesheet_extractor")
 
 EMPTY_TOKEN = "—"
-TRACE_OUTPUT_DIR = (
-    Path(__file__).resolve().parents[4] / "llm_traces" / "excel_extraction"
-)
+TRACE_OUTPUT_DIR = Path(__file__).resolve().parents[4] / "llm_traces" / "excel_extraction"
 
 
 @dataclass
@@ -68,18 +63,17 @@ class SheetProbe:
         return self.ws_values.cell(row=row, column=col).value
 
 
-def probe_workbook(path: str, sheet_name: str | None = None) -> dict[str, SheetProbe]:
+def probe_workbook(path: str) -> dict[str, SheetProbe]:
     """
     Phase 1+2 entry point.
 
     Returns a dict of {sheet_name: SheetProbe} so a multi-sheet workbook
-    can be processed sheet-by-sheet by the caller/graph. If `sheet_name`
-    is given, only that sheet is probed.
+    can be processed sheet-by-sheet by the caller/graph.
     """
     # wb_formulas = openpyxl.load_workbook(path, data_only=False)
     wb_values = openpyxl.load_workbook(path, data_only=True)
 
-    sheet_names = [sheet_name] if sheet_name else wb_values.sheetnames
+    sheet_names = wb_values.sheetnames
     probes: dict[str, SheetProbe] = {}
 
     for name in sheet_names:
@@ -242,25 +236,23 @@ def _current_attachment(state: TimeguardState) -> AttachmentState:
     return attachments[index]
 
 
-def _resolve_attachment_path(attachment: AttachmentState) -> Path | None:
-    attachment_url = attachment.get("attachment_url")
-    if attachment_url:
-        parsed_url = urlparse(attachment_url)
-        candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
-        if candidate.exists():
-            return candidate
+# def _resolve_attachment_path(attachment: AttachmentState) -> Path | None:
+#     attachment_url = attachment.get("attachment_url")
+#     if attachment_url:
+#         parsed_url = urlparse(attachment_url)
+#         candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
+#         if candidate.exists():
+#             return candidate
 
-    file_name = attachment.get("file_name")
-    if file_name:
-        matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
-        if matches:
-            return matches[0]
-    return None
+#     file_name = attachment.get("file_name")
+#     if file_name:
+#         matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
+#         if matches:
+#             return matches[0]
+#     return None
 
 
-def _dump_blocks_for_trace(
-    file_path: Path | str, blocks: list[SerialisedBlock]
-) -> Path:
+def _dump_blocks_for_trace(file_path: Path | str, blocks: list[SerialisedBlock]) -> Path:
     TRACE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     workbook_path = Path(file_path)
@@ -272,28 +264,25 @@ def _dump_blocks_for_trace(
         "block_count": len(blocks),
         "blocks": [asdict(block) for block in blocks],
     }
-    trace_path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    trace_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return trace_path
 
 
 def excel_extraction_node(state: TimeguardState) -> dict:
     """Part A entry point: Phases 1-5 across the whole workbook."""
     attachement = _current_attachment(state)
-    file_path = _resolve_attachment_path(attachement)
+    # file_path = _resolve_attachment_path(attachement)
+    file_path = attachement.get("file_path")
     if file_path is None:
         raise ValueError("Could not resolve attachment path for Excel extraction")
     blocks = extract_workbook(str(file_path))
     trace_path = _dump_blocks_for_trace(file_path, blocks)
-    logger.info(
-        "Probed workbook '%s': found %d sheet block(s).", file_path, len(blocks)
-    )
+    logger.info("Probed workbook '%s': found %d sheet block(s).", file_path, len(blocks))
     logger.info("Saved Excel extraction trace to %s", trace_path)
     return {"current_excel_block_index": 0, "blocks": blocks}
 
 
-def extract_workbook(path: str, sheet_name: str | None = None) -> list[SerialisedBlock]:
+def extract_workbook(path: str) -> list[SerialisedBlock]:
     """
     Process every selected worksheet as one block per sheet.
 

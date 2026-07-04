@@ -8,6 +8,6 @@ def increment_excel_block(state: TimeguardState) -> dict:
 
 def route_next_block(state: TimeguardState) -> str:
     if state["current_excel_block_index"] >= len(state["blocks"]):
-        return "collect_results"
+        return "done"
 
     return "extract_block_with_llm"

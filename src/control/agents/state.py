@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated, Literal, NotRequired, TypedDict
 from uuid import UUID
 
@@ -24,6 +25,7 @@ class BlockResult(TypedDict):
 class AttachmentState(TypedDict):
     gmail_attachment_id: NotRequired[str]
     file_name: str
+    file_path: Path
     # mime_type: str
     # file_size: int
     doc_type: NotRequired[str]
@@ -77,7 +79,7 @@ class TimeguardState(TypedDict):
     excel_current_sheet: NotRequired[dict | None]
     excel_anchor_hits: NotRequired[list[dict]]
     excel_context_snippet: NotRequired[str]
-    excel_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET", "PENDING"]]
+    excel_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
     merged_result: NotRequired[dict]  # used
 
     # PDF classification state (from PDFClassifierState)
@@ -92,11 +94,11 @@ class TimeguardState(TypedDict):
     # Scanned PDF classification state (from ScannedPDFClassifierState)
     scanned_pdf_file_path: NotRequired[str]
     scanned_pdf_page_queue: NotRequired[list[int]]
-    scanned_pdf_pages_checked: NotRequired[int]
+    # scanned_pdf_pages_checked: NotRequired[int]
     scanned_pdf_current_page: NotRequired[dict | None]
     scanned_pdf_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
-    scanned_pdf_confidence: NotRequired[float]
-    scanned_pdf_reason: NotRequired[str]
+    # scanned_pdf_confidence: NotRequired[float]
+    # scanned_pdf_reason: NotRequired[str]
     payload: NotRequired[dict]
 
 
@@ -104,55 +106,55 @@ class TimeguardState(TypedDict):
 #     block: SerialisedBlock
 
 
-class PDFClassifierState(TypedDict):
-    # ── input ────────────────────────────────────────────────────────────────
-    pdf_path: str
+# class PDFClassifierState(TypedDict):
+#     # ── input ────────────────────────────────────────────────────────────────
+#     pdf_path: str
 
-    # ── control ──────────────────────────────────────────────────────────────
-    page_queue: NotRequired[list[int]]
-    pages_checked: NotRequired[int]
+#     # ── control ──────────────────────────────────────────────────────────────
+#     page_queue: NotRequired[list[int]]
+#     pages_checked: NotRequired[int]
 
-    # ── per-page working data (overwritten each iteration) ───────────────────
-    current_page: NotRequired[dict | None]
-    anchor_hits: NotRequired[list[dict]]
-    context_snippet: NotRequired[str]
+#     # ── per-page working data (overwritten each iteration) ───────────────────
+#     current_page: NotRequired[dict | None]
+#     anchor_hits: NotRequired[list[dict]]
+#     context_snippet: NotRequired[str]
 
-    # ── output ───────────────────────────────────────────────────────────────
-    pdf_classification: NotRequired[str]  # "TIMESHEET" | "NOT_A_TIMESHEET"
-
-
-class ExcelClassifierState(TypedDict):
-    file_path: str
-    sheet_names: NotRequired[list[str]]  # all sheet names in workbook
-    sheet_queue: NotRequired[list[int]]  # indices yet to process
-    current_sheet: NotRequired[dict | None]  # sheet being worked on
-    anchor_hits: NotRequired[list[dict]]  # {keyword, score, position}
-    context_snippet: NotRequired[str]  # harvested rows around anchor
-    excel_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET", "PENDING"]]
-    # confidence: NotRequired[str]
-    # reason: NotRequired[str]
-    # sheets_checked: NotRequired[int]
+#     # ── output ───────────────────────────────────────────────────────────────
+#     pdf_classification: NotRequired[str]  # "TIMESHEET" | "NOT_A_TIMESHEET"
 
 
-class ScannedPDFClassifierState(TypedDict):
-    pdf_path: str
-    page_queue: NotRequired[list[int]]
-    pages_checked: NotRequired[int]
-    current_page: NotRequired[dict | None]
-    scanned_pdf_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
-    # final_status: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
-    confidence: NotRequired[float]
-    reason: NotRequired[str]
+# class ExcelClassifierState(TypedDict):
+#     file_path: str
+#     sheet_names: NotRequired[list[str]]  # all sheet names in workbook
+#     sheet_queue: NotRequired[list[int]]  # indices yet to process
+#     current_sheet: NotRequired[dict | None]  # sheet being worked on
+#     anchor_hits: NotRequired[list[dict]]  # {keyword, score, position}
+#     context_snippet: NotRequired[str]  # harvested rows around anchor
+#     excel_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET", "PENDING"]]
+#     # confidence: NotRequired[str]
+#     # reason: NotRequired[str]
+#     # sheets_checked: NotRequired[int]
 
 
-class ImageClassifierState(TypedDict):
-    # ── input ────────────────────────────────────────────────────────────────
-    image_path: str  # local path to downloaded image
+# class ScannedPDFClassifierState(TypedDict):
+#     pdf_path: str
+#     page_queue: NotRequired[list[int]]
+#     pages_checked: NotRequired[int]
+#     current_page: NotRequired[dict | None]
+#     scanned_pdf_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
+#     # final_status: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
+#     confidence: NotRequired[float]
+#     reason: NotRequired[str]
 
-    # ── working data ─────────────────────────────────────────────────────────
-    # image_base64:          NotRequired[str]    # base64 encoded image
-    image_media_type: NotRequired[str]  # "image/jpeg" | "image/png" etc.
 
-    # ── output ───────────────────────────────────────────────────────────────
-    image_classification: NotRequired[str]  # TIMESHEET | NOT_A_TIMESHEET | UNCERTAIN
-    image_reason: NotRequired[str]
+# class ImageClassifierState(TypedDict):
+#     # ── input ────────────────────────────────────────────────────────────────
+#     image_path: str  # local path to downloaded image
+
+#     # ── working data ─────────────────────────────────────────────────────────
+#     # image_base64:          NotRequired[str]    # base64 encoded image
+#     image_media_type: NotRequired[str]  # "image/jpeg" | "image/png" etc.
+
+#     # ── output ───────────────────────────────────────────────────────────────
+#     image_classification: NotRequired[str]  # TIMESHEET | NOT_A_TIMESHEET | UNCERTAIN
+#     image_reason: NotRequired[str]

@@ -49,9 +49,8 @@ def _extract_structured(
 ) -> MergeResponse:
     llm = ChatGroq(
         model_name=MODEL_NAME,
-        api_key=settings.GROQ_API_KEY_1,
+        api_key=settings.GROQ_API_KEY_3,
         temperature=0,
-        max_tokens=4096,
     )
     structured_llm = llm.with_structured_output(MergeResponse)
 
@@ -111,19 +110,19 @@ def _current_source(state: TimeguardState) -> tuple[str, str]:
     return file_name, "excel"
 
 
-def _apply_source_metadata(
-    payload: dict[str, Any],
-    *,
-    file_name: str,
-    content_type: str,
-) -> dict[str, Any]:
-    source = {"file_name": file_name, "content_type": content_type}
-    employee_records = payload.get("employee_records")
-    if isinstance(employee_records, list):
-        for employee_record in employee_records:
-            if isinstance(employee_record, dict):
-                employee_record["source"] = [source]
-    return payload
+# def _apply_source_metadata(
+#     payload: dict[str, Any],
+#     *,
+#     file_name: str,
+#     content_type: str,
+# ) -> dict[str, Any]:
+#     source = {"file_name": file_name, "content_type": content_type}
+#     employee_records = payload.get("employee_records")
+#     if isinstance(employee_records, list):
+#         for employee_record in employee_records:
+#             if isinstance(employee_record, dict):
+#                 employee_record["source"] = [source]
+#     return payload
 
 
 async def _append_block_result_to_content_extract(
@@ -190,9 +189,8 @@ async def node_extract_block_with_llm(
         file_name=file_name,
         content_type=content_type,
         sheet_name=block.sheet_name,
-        block_index=block.block_index,
     )
-
+    #    block_index=block.block_index,
     extraction_failed = False
     failure_reason = None
 
@@ -201,11 +199,12 @@ async def node_extract_block_with_llm(
             system_prompt=system_prompt,
             messages=messages,
         )
-        parsed = _apply_source_metadata(
-            response.model_dump(),
-            file_name=file_name,
-            content_type=content_type,
-        )
+        parsed = response.model_dump()
+        # parsed = _apply_source_metadata(
+        #     response.model_dump(),
+        #     file_name=file_name,
+        #     content_type=content_type,
+        # )
         trace_path = store_llm_result_for_testing(
             source="excel",
             payload=parsed,

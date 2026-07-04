@@ -1,6 +1,16 @@
 import openpyxl
 
-from src.control.agents.state import TimeguardState
+from src.control.agents.state import AttachmentState, TimeguardState
+
+
+def _current_attachment(state: TimeguardState) -> AttachmentState:
+    attachments = state.get("attachments", [])
+    index = state.get("current_attachment_index", 0)
+
+    if index >= len(attachments):
+        raise ValueError("No attachment available for PDF processing")
+
+    return attachments[index]
 
 
 def next_sheet(state: TimeguardState) -> TimeguardState:
@@ -8,6 +18,8 @@ def next_sheet(state: TimeguardState) -> TimeguardState:
     Load exactly ONE sheet on demand, then close the workbook.
     Extracts cell values row by row for that sheet only.
     """
+    attachment_state = _current_attachment(state)
+    excel_path = attachment_state.get("file_path")
     queue = state["excel_sheet_queue"]
 
     if not queue:
@@ -16,10 +28,10 @@ def next_sheet(state: TimeguardState) -> TimeguardState:
     idx = queue[0]
     sheet_name = state["excel_sheet_names"][idx]
 
-    wb = openpyxl.load_workbook(state["excel_file_path"], read_only=True, data_only=True)
+    wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
     ws = wb[sheet_name]
 
-    rows = []
+    # rows = []
     combined = ""
 
     for row in ws.iter_rows(values_only=True):
@@ -27,8 +39,8 @@ def next_sheet(state: TimeguardState) -> TimeguardState:
         clean_row = [str(cell).strip() for cell in row if cell is not None]
         if not clean_row:
             continue
-        row_text = " | ".join(clean_row)
-        rows.append(clean_row)
+        row_text = "  ".join(clean_row)
+        # rows.append(clean_row)
         combined += " " + row_text
 
     # Check if sheet is hidden
@@ -40,8 +52,8 @@ def next_sheet(state: TimeguardState) -> TimeguardState:
         **state,
         "excel_current_sheet": {
             "sheet_name": sheet_name,
-            "sheet_idx": idx,
-            "rows": rows,  # list of row lists
+            # "sheet_idx": idx,
+            # "rows": rows,  # list of row lists
             "combined": combined.strip().lower(),
             "is_hidden": is_hidden,
         },

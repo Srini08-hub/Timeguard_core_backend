@@ -56,7 +56,6 @@ def _extract_structured(
         model_name=MODEL_NAME,
         api_key=settings.GROQ_API_KEY_2,
         temperature=0,
-        max_tokens=4096,
     )
     structured_llm = llm.with_structured_output(MergeResponse)
 
@@ -271,7 +270,8 @@ async def hybrid_pdf_extraction_node(
 ) -> TimeguardState:
     """Parse hybrid PDF to markdown with LlamaParse, then extract structured data."""
     attachment = _current_attachment(state)
-    file_path = _resolve_attachment_path(attachment)
+    # file_path = _resolve_attachment_path(attachment)
+    file_path = attachment.get("file_path")
     if file_path is None:
         raise ValueError("Could not resolve attachment path for hybrid PDF extraction")
 

@@ -15,11 +15,12 @@ class Settings(BaseSettings):
     GMAIL_POLL_INTERVAL_SECONDS: int = 120
     GROQ_API_KEY_1: str
     GROQ_API_KEY_2: str
+    GROQ_API_KEY_3: str
     GOOGLE_API_KEY: str
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
     ATTACHMENT_STORAGE_DIR: Path = BASE_DIR / "attachments"
-    ATTACHMENT_BASE_URL: str = "http://localhost:8000/attachments"
+    ATTACHMENT_BASE_URL: str = "http://localhost:8002/attachments"
     LLAMA_CLOUD_API_KEY: str
     LANGSMITH_API_KEY: str
     LANGSMITH_TRACING: bool = False

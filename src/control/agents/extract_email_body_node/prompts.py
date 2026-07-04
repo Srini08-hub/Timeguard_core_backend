@@ -132,3 +132,33 @@ def build_extraction_messages(
             "content": f"{source_header}Subject:\n{subject}\n\nBody:\n{body}",
         }
     ]
+
+
+# ### TASK
+# Return structured data matching the canonical schema:
+# {
+#   "global_data": {
+#     "client_name": "string or null",
+#     "week_ending": "YYYY-MM-DD or null",
+#     "department": "string or null"
+#   },
+#   "employee_records": [
+#     {
+#       "employee_name": "string",
+#       "department": "string or null",
+#       "total_hours": "string or null",
+#       "source": [{"file_name": "string", "content_type": "email"}],
+#       "timesheet_records": [
+#         {
+#           "date": "YYYY-MM-DD or null",
+#           "check_in": "HH:MM or null",
+#           "check_out": "HH:MM or null",
+#           "break_hour": "HH:MM or null",
+#           "hours": "string or null",
+#           "overtime_hours": "string or null",
+#           "confidence": 0.00
+#         }
+#       ]
+#     }
+#   ]
+# }

@@ -21,6 +21,12 @@ def classify_page(text: str, images: list, page_area: float) -> str:
     has_significant_image = any(
         (img["width"] * img["height"]) >= 0.30 * page_area for img in images
     )
+    # total_image_area = sum(
+    # img["width"] * img["height"]
+    # for img in images
+    # )
+
+    #  has_significant_image = total_image_area >= 0.30 * page_area
 
     if has_real_text and not has_significant_image:
         return "digitalpdfnode"
@@ -144,11 +150,11 @@ def route_pdf_classification(state: TimeguardState) -> str:
     classification = attachments[index].get("doc_type")
     # logger.info()
     if classification == "digital_pdf":
-        return "digitalpdfnode"
+        return "pdf_node"
     if classification == "scanned_pdf":
-        return "scannedpdfnode"
+        return "scanned_pdf_node"
     if classification == "hybrid_pdf":
-        return "hybridpdfnode"
+        return "hybrid_pdf_node"
 
     return "increment_attachment_node"
 

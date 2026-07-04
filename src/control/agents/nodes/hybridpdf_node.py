@@ -91,10 +91,10 @@ def _result_value(result: object, key: str) -> str | float | None:
 
 
 async def _classify_with_llamacloud(
-    pdf_path: Path,
+    hybrid_pdf_path: Path,
 ) -> tuple[str | None, float | None, str | None]:
     client = AsyncLlamaCloud(api_key=settings.LLAMA_CLOUD_API_KEY)
-    file_obj = await client.files.create(file=str(pdf_path), purpose="classify")
+    file_obj = await client.files.create(file=str(hybrid_pdf_path), purpose="classify")
     result = await client.classifier.classify(
         file_ids=[file_obj.id],
         rules=_classification_rules(),
@@ -102,7 +102,9 @@ async def _classify_with_llamacloud(
     )
 
     if not getattr(result, "items", None):
-        raise ValueError(f"LlamaClassify returned no classification results for {pdf_path}")
+        raise ValueError(
+            f"LlamaClassify returned no classification results for{hybrid_pdf_path}"
+        )
 
     item = result.items[0]
     classified = getattr(item, "result", None)
@@ -117,7 +119,7 @@ async def _classify_with_llamacloud(
     return classification, confidence, reasoning
 
 
-async def hybridpdfnode(
+async def hybrid_pdf_node(
     state: TimeguardState,
     config: RunnableConfig,
 ) -> TimeguardState:
@@ -126,12 +128,13 @@ async def hybridpdfnode(
     email_repository = EmailRepository(db_session)
 
     attachment_state = _current_attachment(state)
-    pdf_path = _resolve_attachment_path(attachment_state)
+    hybrid_pdf_path = attachment_state.get("file_path")
+    # pdf_path = _resolve_attachment_path(attachment_state)
 
     logger.info(
         "Processing hybrid PDF attachment %s from %s",
         attachment_state.get("file_name", ""),
-        pdf_path,
+        hybrid_pdf_path,
     )
 
     classification = None
@@ -140,7 +143,9 @@ async def hybridpdfnode(
     llm_failed = False
 
     try:
-        classification, confidence, reasoning = await _classify_with_llamacloud(pdf_path)
+        classification, confidence, reasoning = await _classify_with_llamacloud(
+            hybrid_pdf_path
+        )
         attachment_status = _attachment_status_from_classification(classification)
 
         logger.info(

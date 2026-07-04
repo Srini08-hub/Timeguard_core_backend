@@ -54,7 +54,6 @@ def _extract_structured(
         model_name=MODEL_NAME,
         api_key=settings.GROQ_API_KEY_1,
         temperature=0,
-        max_tokens=4096,
     )
     structured_llm = llm.with_structured_output(MergeResponse)
 
@@ -106,19 +105,19 @@ def _extract_structured(
     )
 
 
-def _apply_source_metadata(
-    payload: dict[str, Any],
-    *,
-    file_name: str,
-    content_type: str,
-) -> dict[str, Any]:
-    source = {"file_name": file_name, "content_type": content_type}
-    employee_records = payload.get("employee_records")
-    if isinstance(employee_records, list):
-        for employee_record in employee_records:
-            if isinstance(employee_record, dict):
-                employee_record["source"] = [source]
-    return payload
+# def _apply_source_metadata(
+#     payload: dict[str, Any],
+#     *,
+#     file_name: str,
+#     content_type: str,
+# ) -> dict[str, Any]:
+#     source = {"file_name": file_name, "content_type": content_type}
+#     employee_records = payload.get("employee_records")
+#     if isinstance(employee_records, list):
+#         for employee_record in employee_records:
+#             if isinstance(employee_record, dict):
+#                 employee_record["source"] = [source]
+#     return payload
 
 
 async def _store_body_content_extract_payload(
@@ -180,11 +179,12 @@ async def email_body_extraction_node(
             system_prompt=system_prompt,
             messages=messages,
         )
-        parsed = _apply_source_metadata(
-            response.model_dump(),
-            file_name=file_name,
-            content_type=content_type,
-        )
+        parsed = response.model_dump()
+        # parsed = _apply_source_metadata(
+        #     response.model_dump(),
+        #     file_name=file_name,
+        #     content_type=content_type,
+        # )
         await _store_body_content_extract_payload(state, config, parsed)
 
         trace_path = store_llm_result_for_testing(
@@ -206,7 +206,7 @@ async def email_body_extraction_node(
         await db_session.commit()
 
         # Mark email body extraction as complete
-        result = cast(TimeguardState, {**state, "email_body_extracted": True})
+        result = cast(TimeguardState, {**state})
         return result
     except ExtractionError as exc:
         logger.error("Email body extraction failed permanently: %s", exc)

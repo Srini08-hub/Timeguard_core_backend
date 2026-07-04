@@ -12,7 +12,7 @@ Markdown representing one whole PDF document, split into page sections.
 - Metadata (Employee Name, Week Ending, Client Name, Department, etc.) may appear above/below its table or in a page header/footer.
 - The user message includes source metadata. Use that exact source file_name and content_type in every employee record.
 
-### TASK
+## TASK
 Return structured data matching the canonical schema:
 {
   "global_data": {
@@ -91,6 +91,9 @@ Input:
   | Mon | 8 |
   | Tue | 8 |
 
+
+### TASK
+# Return structured data matching the canonical schema:
 Output:
   {
     "global_data": {"client_name": "Acme Corp", "week_ending": "2026-06-28"},
@@ -129,3 +132,32 @@ def build_extraction_messages(
         "PDF markdown:\n"
     )
     return [{"role": "user", "content": source_header + markdown_payload}]
+
+
+### TASK
+# Return structured data matching the canonical schema:
+# {
+#   "global_data": {
+#     "client_name": "string or null",
+#     "week_ending": "YYYY-MM-DD or null"
+#   },
+#   "employee_records": [
+#     {
+#       "employee_name": "string",
+#       "department": "string or null",
+#       "total_hours": "string or null",
+#       "source": [{"file_name": "string", "content_type": "pdf"}],
+#       "timesheet_records": [
+#         {
+#           "date": "YYYY-MM-DD or null",
+#           "check_in": "HH:MM or null",
+#           "check_out": "HH:MM or null",
+#           "break_hour": "HH:MM or null",
+#           "hours": "string or null",
+#           "overtime_hours": "string or null",
+#           "confidence": 0.00
+#         }
+#       ]
+#     }
+#   ]
+# }

@@ -2,7 +2,6 @@ import base64
 import logging
 import mimetypes
 from pathlib import Path
-from urllib.parse import urlparse
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
@@ -28,15 +27,15 @@ SUPPORTED_IMAGE_TYPES = {
 
 class ImageTimesheetClassification(BaseModel):
     is_timesheet: bool = Field(description="Whether the attached image is a timesheet.")
-    confidence: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Model confidence from 0.0 to 1.0.",
-    )
-    reasoning: str = Field(
-        min_length=1,
-        description="Short rationale based only on visible image evidence.",
-    )
+    # confidence: float = Field(
+    #     ge=0.0,
+    #     le=1.0,
+    #     description="Model confidence from 0.0 to 1.0.",
+    # )
+    # reasoning: str = Field(
+    #     min_length=1,
+    #     description="Short rationale based only on visible image evidence.",
+    # )
 
 
 def _current_attachment(state: TimeguardState) -> AttachmentState:
@@ -45,17 +44,17 @@ def _current_attachment(state: TimeguardState) -> AttachmentState:
     return attachments[index]
 
 
-def _resolve_attachment_path(attachment: AttachmentState) -> Path:
-    attachment_url = attachment.get("attachment_url")
-    if attachment_url:
-        parsed_url = urlparse(attachment_url)
-        candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
-        if candidate.exists():
-            return candidate
+# def _resolve_attachment_path(attachment: AttachmentState) -> Path:
+#     attachment_url = attachment.get("attachment_url")
+#     if attachment_url:
+#         parsed_url = urlparse(attachment_url)
+#         candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
+#         if candidate.exists():
+#             return candidate
 
-    raise FileNotFoundError(
-        f"Unable to resolve a stored file for attachment {attachment.get('file_name', '')}"
-    )
+#     raise FileNotFoundError(
+#         f"Unable to resolve a stored file for attachment {attachment.get('file_name', '')}"
+#     )
 
 
 def _load_image_for_llm(image_path: Path) -> tuple[str, bytes]:
@@ -86,7 +85,7 @@ dates or pay periods, days of the week, clock in/out times, hours worked,
 total hours, client/project rows, approvals, or signatures.
 
 Base the answer only on the image. If the image is unreadable or lacks enough
-timesheet evidence, classify it as not a timesheet with lower confidence."""
+timesheet evidence, classify it as not a timesheet """
 
     llm = ChatGoogleGenerativeAI(
         # model="gemini-2.5-flash",
@@ -115,7 +114,7 @@ timesheet evidence, classify it as not a timesheet with lower confidence."""
     return response
 
 
-async def imagenode(
+async def image_node(
     state: TimeguardState,
     config: RunnableConfig,
 ) -> TimeguardState:
@@ -124,7 +123,8 @@ async def imagenode(
     email_repository = EmailRepository(db_session)
 
     attachment_state = _current_attachment(state)
-    image_path = _resolve_attachment_path(attachment_state)
+    image_path = attachment_state.get("file_path")
+    # image_path = _resolve_attachment_path(attachment_state)
     media_type, image_bytes = _load_image_for_llm(image_path)
 
     logger.info(

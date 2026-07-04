@@ -12,9 +12,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
 
-from src.config.settings import settings
 from src.control.agents.digital_extract_node.layout import unify_page
 from src.control.agents.digital_extract_node.raw_extract import extract_raw
 from src.control.agents.digital_extract_node.serialize import (
@@ -63,26 +61,27 @@ def _current_attachment(state: TimeguardState) -> AttachmentState:
     return attachments[index]
 
 
-def _resolve_attachment_path(attachment: AttachmentState) -> Path | None:
-    attachment_url = attachment.get("attachment_url")
-    if attachment_url:
-        parsed_url = urlparse(attachment_url)
-        candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
-        if candidate.exists():
-            return candidate
+# def _resolve_attachment_path(attachment: AttachmentState) -> Path | None:
+#     attachment_url = attachment.get("attachment_url")
+#     if attachment_url:
+#         parsed_url = urlparse(attachment_url)
+#         candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
+#         if candidate.exists():
+#             return candidate
 
-    file_name = attachment.get("file_name")
-    if file_name:
-        matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
-        if matches:
-            return matches[0]
-    return None
+#     file_name = attachment.get("file_name")
+#     if file_name:
+#         matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
+#         if matches:
+#             return matches[0]
+#     return None
 
 
 def digital_pdf_extraction_node(state: TimeguardState) -> dict:
     """Part A entry point: PyMuPDF+pdfplumber extraction -> one PDF markdown block."""
     attachment = _current_attachment(state)
-    file_path = _resolve_attachment_path(attachment)
+    # file_path = _resolve_attachment_path(attachment)
+    file_path = attachment.get("file_path")
     if file_path is None:
         raise ValueError("Could not resolve attachment path for PDF extraction")
     blocks = extract_pdf(str(file_path))
