@@ -360,7 +360,7 @@ async def validation_node(
         employee_name = employee.get("employee_name")
         failures = _validate_employee_record(employee)
         severities = [severity for _, severity, _ in failures]
-        status = TimecardStatus.EXCEPTION if failures else TimecardStatus.CLEAN
+        status = TimecardStatus.EXCEPTION if failures else TimecardStatus.NO_EXCEPTION
         severity = _max_severity(severities)
 
         # Skip calculations if emp_id is missing

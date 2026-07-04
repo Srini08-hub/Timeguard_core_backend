@@ -132,7 +132,7 @@ class TimecardRepository:
     ) -> Timecard:
         try:
             timecard.status = status
-            if status == TimecardStatus.CLEAN:
+            if status == TimecardStatus.NO_EXCEPTION:
                 timecard.severity = TimecardSeverity.NONE
             await self._session.flush()
             await self._session.refresh(timecard)
@@ -188,7 +188,7 @@ class TimecardRepository:
             if reviewed_by is not None:
                 timecard.reviewed_by = reviewed_by
 
-            timecard.status = TimecardStatus.CLEAN
+            timecard.status = TimecardStatus.NO_EXCEPTION
             timecard.severity = TimecardSeverity.NONE
             await self._session.flush()
             await self._session.refresh(timecard)

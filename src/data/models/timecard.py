@@ -22,7 +22,7 @@ from src.data.models.exception import TimecardException
 
 class TimecardStatus(StrEnum):
     PENDING = "pending"
-    CLEAN = "clean"
+    NO_EXCEPTION = "no_exception"
     EXCEPTION = "exception"
     APPROVED = "approved"
     REJECTED = "rejected"

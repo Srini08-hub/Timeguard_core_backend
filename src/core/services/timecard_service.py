@@ -71,6 +71,19 @@ class TimecardService:
         updated = await self._timecard_repository.reject(timecard)
         return self._to_response(updated)
 
+    async def reject_timecards(
+        self,
+        timecard_ids: list[UUID],
+    ) -> list[TimecardResponse]:
+        rejected: list[TimecardResponse] = []
+        for timecard_id in timecard_ids:
+            timecard = await self._timecard_repository.get_by_id(timecard_id)
+            if timecard is None:
+                continue
+            updated = await self._timecard_repository.reject(timecard)
+            rejected.append(self._to_response(updated))
+        return rejected
+
     async def resolve_timecard(
         self,
         timecard_id: UUID,
