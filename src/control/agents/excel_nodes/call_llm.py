@@ -77,7 +77,7 @@ class ExcelClassificationResponse(BaseModel):
     classification: Excelclassifier = Field(
         description="Whether the page belongs to a timesheet"
     )
-    reason: str = Field(description="Short explanation for the classification")
+    # reason: str = Field(description="Short explanation for the classification")
 
 
 async def call_llm(
@@ -97,7 +97,7 @@ SNIPPETS:
 Reply in exactly this format:
 CLASSIFICATION: [TIMESHEET / NOT_A_TIMESHEET]
 
-REASON: [one sentence]
+
 """
 
     try:
@@ -105,7 +105,7 @@ REASON: [one sentence]
             # model_name="llama-3.3-70b-versatile",
             model_name="llama-3.1-8b-instant",
             temperature=0,
-            api_key=settings.GROQ_API_KEY_1,
+            api_key=settings.GROQ_API_KEY_2,
         )
 
         structured_llm = llm.with_structured_output(ExcelClassificationResponse)

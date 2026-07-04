@@ -103,7 +103,7 @@ async def fetch_parse_node(
                     raw.gmail_message_id,
                     raw_att.gmail_attachment_id,
                 )
-                public_url, _ = save_attachment(attachment_bytes, raw_att.filename)
+                public_url, file_path = save_attachment(attachment_bytes, raw_att.filename)
                 await attachment_repo.set_url_and_status(
                     attachment,
                     url=public_url,
@@ -114,6 +114,7 @@ async def fetch_parse_node(
                 attachments_state.append(
                     AttachmentState(
                         file_name=raw_att.filename,
+                        file_path=file_path,
                         doc_type=document_type,
                         attachment_url=public_url,
                         attachment_db_id=attachment.attachment_id,

@@ -65,7 +65,7 @@ Identify:
 
 ### DATE RULES
 - Normalize all output dates to YYYY-MM-DD.
-- When parsing dates, try India format first: DD/MM/YYYY or DD/MM/YY. If that fails, try US format: MM/DD/YYYY or MM/DD/YY. Also handle ISO/textual dates when explicitly visible.
+- **When parsing dates, try India format first: DD/MM/YYYY or DD/MM/YY. If that fails, try US format: MM/DD/YYYY or MM/DD/YY. Also handle ISO/textual dates when explicitly visible.**
 - If no week ending is visible, set global_data.week_ending to null. Do not assume it.
 - Never output weekday names as dates. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
 - Example: if week_ending = 2026-06-28, Monday -> 2026-06-22, Tuesday -> 2026-06-23, Wednesday -> 2026-06-24, Thursday -> 2026-06-25, Friday -> 2026-06-26, Saturday -> 2026-06-27, Sunday -> 2026-06-28.

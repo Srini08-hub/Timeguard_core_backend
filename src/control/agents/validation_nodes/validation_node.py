@@ -142,10 +142,7 @@ def _exception_reason(
     if exc_type == ExceptionType.MISSING_ASSIGNMENT_ID:
         return f"{prefix} could not be matched to an assignment ID."
     if exc_type == ExceptionType.TIME_ENTRY_CONFLICT:
-        return (
-            f"{prefix}{date_label} has check-in/check-out duration that does "
-            "not match recorded hours."
-        )
+        return f"{prefix}{date_label} has  duration that does not match recorded hours."
     if exc_type == ExceptionType.HOURS_EXCEED_LIMIT:
         return f"{prefix}{date_label} has a daily time entry above 15 hours."
     if exc_type == ExceptionType.WEEKLY_HOURS_EXCEED_LIMIT:

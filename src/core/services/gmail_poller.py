@@ -19,16 +19,13 @@ class GmailPoller:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        mailbox_address: str | None = None,
+        poll_interval_seconds: int,
         gmail_service: GmailService | None = None,
-        poll_interval_seconds: int | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._gmail_service = gmail_service or GmailService()
         self._mailbox_address = settings.GMAIL_POLL_MAILBOX_ADDRESS
-        self._poll_interval_seconds = (
-            poll_interval_seconds or settings.GMAIL_POLL_INTERVAL_SECONDS
-        )
+        self._poll_interval_seconds = poll_interval_seconds
         self._stop_event = asyncio.Event()
 
     def stop(self) -> None:
@@ -108,8 +105,7 @@ class GmailPoller:
                     )
                     await session.commit()
                     logger.warning(
-                        "Reset Gmail poll state for mailbox=%s"
-                        " because history_id expired",
+                        "Reset Gmail poll state for mailbox=%s because history_id expired",
                         mailbox_address,
                     )
                     return
@@ -132,9 +128,7 @@ class GmailPoller:
                 classify_email.delay(message_id)
 
             if mailbox_address is not None and newest_history_id is not None:
-                await repository.update_history_id(
-                    mailbox_address, str(newest_history_id)
-                )
+                await repository.update_history_id(mailbox_address, str(newest_history_id))
                 await session.commit()
             logger.info(
                 "Updated Gmail poll state for mailbox=%s history_id=%s",

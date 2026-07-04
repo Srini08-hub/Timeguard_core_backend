@@ -77,15 +77,15 @@ class PDFClassificationResponse(BaseModel):
     classification: PDFClassification = Field(
         description="Whether the  PDF page is a timesheet."
     )
-    confidence: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Model confidence from 0.0 to 1.0.",
-    )
-    reason: str = Field(
-        min_length=1,
-        description="Short rationale based only on visible page evidence.",
-    )
+    # confidence: float = Field(
+    #     ge=0.0,
+    #     le=1.0,
+    #     description="Model confidence from 0.0 to 1.0.",
+    # )
+    # reason: str = Field(
+    #     min_length=1,
+    #     description="Short rationale based only on visible page evidence.",
+    # )
     # reason: str = Field(description="Short explanation for the classification")
 
 
@@ -106,7 +106,6 @@ SNIPPETS:
 Reply in exactly this format:
 CLASSIFICATION: [TIMESHEET / NOT_A_TIMESHEET]
 
-REASON: [one sentence]
 """
 
     try:

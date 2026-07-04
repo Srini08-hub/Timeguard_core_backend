@@ -51,7 +51,6 @@ def _extract_structured(
         model_name=MODEL_NAME,
         api_key=settings.GROQ_API_KEY_1,
         temperature=0,
-        max_tokens=4096,
     )
     structured_llm = llm.with_structured_output(MergeResponse)
 

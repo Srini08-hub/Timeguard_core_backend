@@ -255,7 +255,8 @@ async def scanned_pdf_extraction_node(
     config: RunnableConfig,
 ) -> TimeguardState:
     attachment = _current_attachment(state)
-    pdf_path = _resolve_attachment_path(attachment)
+    # pdf_path = _resolve_attachment_path(attachment)
+    pdf_path = attachment.get("file_path")
     rendered_pages = render_pdf_pages(pdf_path)
     file_name = attachment.get("file_name") or "unknown"
     content_type = "pdf"
@@ -289,11 +290,12 @@ async def scanned_pdf_extraction_node(
             system_prompt=system_prompt,
             messages=messages,
         )
-        parsed = _apply_source_metadata(
-            response.model_dump(),
-            file_name=file_name,
-            content_type=content_type,
-        )
+        parsed = response.model_dump()
+        # parsed = _apply_source_metadata(
+        #     response.model_dump(),
+        #     file_name=file_name,
+        #     content_type=content_type,
+        # )
     except ExtractionError as exc:
         logger.error(
             "Scanned PDF extraction failed permanently for attachment %s: %s",

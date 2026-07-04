@@ -25,15 +25,6 @@ class ScannedPDFClassificationResponse(BaseModel):
     classification: ScannedPDFClassification = Field(
         description="Whether the scanned PDF page is a timesheet."
     )
-    confidence: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Model confidence from 0.0 to 1.0.",
-    )
-    reason: str = Field(
-        min_length=1,
-        description="Short rationale based only on visible page evidence.",
-    )
 
 
 async def call_vision_llm(
@@ -51,7 +42,7 @@ dates or pay periods, days of the week, clock in/out times, hours worked,
 total hours, client/project rows, approvals, or signatures.
 
 Base the answer only on the page image. If the page is unreadable or lacks
-enough timesheet evidence, classify it as not a timesheet with lower confidence."""
+enough timesheet evidence, classify it as not a timesheet"""
 
     try:
         llm = ChatGoogleGenerativeAI(

@@ -1,11 +1,23 @@
 # from typing import TypedDict, NotRequired
 import pdfplumber
 
-from src.control.agents.state import TimeguardState
+from src.control.agents.state import AttachmentState, TimeguardState
 
 
-def load_pdf(state: TimeguardState) -> TimeguardState:
-    with pdfplumber.open(state["pdf_file_path"]) as pdf:
+def _current_attachment(state: TimeguardState) -> AttachmentState:
+    attachments = state.get("attachments", [])
+    index = state.get("current_attachment_index", 0)
+
+    if index >= len(attachments):
+        raise ValueError("No attachment available for PDF processing")
+
+    return attachments[index]
+
+
+def pdf_node(state: TimeguardState) -> TimeguardState:
+    attachment_state = _current_attachment(state)
+    pdf_path = attachment_state.get("file_path")
+    with pdfplumber.open(pdf_path) as pdf:
         total_pages = len(pdf.pages)
         # [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     return {

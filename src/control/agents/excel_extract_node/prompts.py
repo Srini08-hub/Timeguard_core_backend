@@ -12,7 +12,7 @@ Serialized text representing one Excel worksheet block.
 - Metadata blocks (Employee Name, Week Ending, Client Name, Department, etc.) may appear above, below, or beside the timesheet grid.
 - The user message includes source metadata. Use that exact source file_name and content_type in every employee record.
 
-### TASK
+      ### TASK
 Return structured data matching the canonical schema:
 {
   "global_data": {
@@ -80,7 +80,7 @@ Strip coordinate and layout noise ("R5:", "A5:", merged-cell descriptors, sheet 
 
 Example:
 Input:
-  Source metadata: file_name=timesheet.xlsx, content_type=excel, sheet_name=Sheet1, block_index=0
+  Source metadata: file_name=timesheet.xlsx, content_type=excel, sheet_name=Sheet1
   R1: A1: Company | B1: Acme Corp
   R2: A2: Week Ending | B2: 28/06/2026
   R3: A3: Employee | B3: John Smith
@@ -88,6 +88,9 @@ Input:
   R6: A6: Mon | B6: 8
   R7: A7: Tue | B7: 8
 
+
+### TASK
+# Return structured data matching the canonical schema:
 Output:
   {
     "global_data": {"client_name": "Acme Corp", "week_ending": "2026-06-28"},
@@ -118,7 +121,6 @@ def build_extraction_messages(
     file_name: str | None = None,
     content_type: str = "excel",
     sheet_name: str | None = None,
-    block_index: int | None = None,
 ) -> list[dict]:
     """Single user turn containing source metadata and the worksheet payload."""
     source_header = (
@@ -126,7 +128,37 @@ def build_extraction_messages(
         f"- file_name: {file_name or 'unknown'}\n"
         f"- content_type: {content_type}\n"
         f"- sheet_name: {sheet_name or 'unknown'}\n"
-        f"- block_index: {block_index if block_index is not None else 'unknown'}\n\n"
-        "Serialized worksheet:\n"
     )
     return [{"role": "user", "content": source_header + serialised_text}]
+    # f"- block_index: {block_index if block_index is not None else 'unknown'}\n\n"
+    #   "Serialized worksheet:\n"
+
+    ### TASK
+
+
+# Return structured data matching the canonical schema:
+# {
+#   "global_data": {
+#     "client_name": "string or null",
+#     "week_ending": "YYYY-MM-DD or null"
+#   },
+#   "employee_records": [
+#     {
+#       "employee_name": "string",
+#       "department": "string or null",
+#       "total_hours": "string or null",
+#       "source": [{"file_name": "string", "content_type": "excel"}],
+#       "timesheet_records": [
+#         {
+#           "date": "YYYY-MM-DD or null",
+#           "check_in": "HH:MM or null",
+#           "check_out": "HH:MM or null",
+#           "break_hour": "HH:MM or null",
+#           "hours": "string or null",
+#           "overtime_hours": "string or null",
+#           "confidence": 0.00
+#         }
+#       ]
+#     }
+#   ]
+# }

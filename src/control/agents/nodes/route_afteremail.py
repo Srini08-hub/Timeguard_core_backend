@@ -35,8 +35,8 @@ def route_after_email_body(state: TimeguardState) -> str:
         # All attachments processed, route to email_body_extraction_node if needed
         # , then merge
         # if state.get("email_body_classification") == "TIMESHEET":
-        if state.get("email_body_extracted"):
-            return "merge_node"
+        # if state.get("email_body_extracted"):
+        #     return "merge_node"
         return "email_body_extraction_node"
 
     attachment = attachments[index]
@@ -60,7 +60,10 @@ def route_after_email_body(state: TimeguardState) -> str:
     elif doc_type == "hybrid_pdf":
         return "hybrid_pdf_extraction_node"
 
-    logger.warning(
-        "Unsupported doc_type %r for timesheet attachment at index %d", doc_type, index
+    # logger.warning(
+    #     "Unsupported doc_type %r for timesheet attachment at index %d", doc_type, index
+    # )
+    # return "increment_extraction_node"
+    raise ValueError(
+        f"Unsupported doc_type {doc_type!r} for timesheet attachment at index {index}"
     )
-    return "increment_extraction_node"

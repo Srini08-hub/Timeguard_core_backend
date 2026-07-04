@@ -7,7 +7,6 @@ import logging
 import mimetypes
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -132,24 +131,24 @@ def _current_attachment(state: TimeguardState) -> AttachmentState:
     return attachments[index]
 
 
-def _resolve_attachment_path(attachment: AttachmentState) -> Path:
-    attachment_url = attachment.get("attachment_url")
-    if attachment_url:
-        parsed_url = urlparse(attachment_url)
-        candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
-        if candidate.exists():
-            return candidate
+# def _resolve_attachment_path(attachment: AttachmentState) -> Path:
+#     attachment_url = attachment.get("attachment_url")
+#     if attachment_url:
+#         parsed_url = urlparse(attachment_url)
+#         candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
+#         if candidate.exists():
+#             return candidate
 
-    file_name = attachment.get("file_name")
-    if file_name:
-        matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
-        if matches:
-            return matches[0]
+#     file_name = attachment.get("file_name")
+#     if file_name:
+#         matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
+#         if matches:
+#             return matches[0]
 
-    raise FileNotFoundError(
-        f"Unable to resolve a stored "
-        f"file for attachment {attachment.get('file_name', '<unknown>')}"
-    )
+#     raise FileNotFoundError(
+#         f"Unable to resolve a stored "
+#         f"file for attachment {attachment.get('file_name', '<unknown>')}"
+#     )
 
 
 def _load_image_for_llm(image_path: Path) -> tuple[str, bytes]:
@@ -258,7 +257,8 @@ async def image_extraction_node(
 
     try:
         attachment = _current_attachment(state)
-        image_path = _resolve_attachment_path(attachment)
+        # image_path = _resolve_attachment_path(attachment)
+        image_path = attachment.get("file_path")
         media_type, image_bytes = _load_image_for_llm(image_path)
         image_base64 = base64.b64encode(image_bytes).decode("ascii")
         file_name = attachment.get("file_name") or "unknown"
@@ -282,11 +282,12 @@ async def image_extraction_node(
             system_prompt=system_prompt,
             messages=messages,
         )
-        parsed = _apply_source_metadata(
-            response.model_dump(),
-            file_name=file_name,
-            content_type=content_type,
-        )
+        parsed = response.model_dump()
+        # parsed = _apply_source_metadata(
+        #     response.model_dump(),
+        #     file_name=file_name,
+        #     content_type=content_type,
+        # )
         await _store_content_extract_payload(state, config, parsed)
 
         trace_path = store_llm_result_for_testing(
