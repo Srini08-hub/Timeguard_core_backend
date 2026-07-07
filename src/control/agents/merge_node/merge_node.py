@@ -15,7 +15,6 @@ from src.data.models.email import EmailStatus
 from src.data.repositories.content_extract_repository import ContentExtractRepository
 from src.data.repositories.email_repository import EmailRepository
 from src.data.repositories.timesheet_repository import TimesheetRepository
-from src.llm_trace_debug import store_llm_result_for_testing
 
 # LLM merge imports preserved for the commented implementation below:
 # import json
@@ -360,16 +359,16 @@ async def merge_node(
         payload = _combine_merge_payloads(extracted_payloads)
 
         # Step 3: Store result as JSON file for testing
-        trace_path = store_llm_result_for_testing(
-            source="merge",
-            payload=payload,
-            extra={
-                "email_id": str(email_id),
-                "source_count": len(extracted_data),
-                "structured_payload_count": len(extracted_payloads),
-            },
-        )
-        logger.info("Stored merge result for testing at %s", trace_path)
+        # trace_path = store_llm_result_for_testing(
+        #     source="merge",
+        #     payload=payload,
+        #     extra={
+        #         "email_id": str(email_id),
+        #         "source_count": len(extracted_data),
+        #         "structured_payload_count": len(extracted_payloads),
+        #     },
+        # )
+        # logger.info("Stored merge result for testing at %s", trace_path)
 
         # Step 4: Extract client_name and week_ending from payload
         global_data = payload.get("global_data", {})
@@ -455,15 +454,15 @@ async def merge_node(
         await db_session.commit()
 
         # Store error for testing
-        store_llm_result_for_testing(
-            source="merge",
-            payload={
-                "success": False,
-                "error": str(e),
-                "email_id": str(email_id),
-                "source_count": len(extracted_data),
-            },
-            extra={"email_id": str(email_id)},
-        )
+        # store_llm_result_for_testing(
+        #     source="merge",
+        #     payload={
+        #         "success": False,
+        #         "error": str(e),
+        #         "email_id": str(email_id),
+        #         "source_count": len(extracted_data),
+        #     },
+        #     extra={"email_id": str(email_id)},
+        # )
 
         return state

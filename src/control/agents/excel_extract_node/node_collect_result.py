@@ -14,5 +14,5 @@ def node_collect_results(state: TimeguardState) -> dict:
     n_ok = sum(1 for r in state["results"] if r["success"])
     n_fail = len(state["results"]) - n_ok
     logger.info("Workflow complete: %d block(s) succeeded, %d failed.", n_ok, n_fail)
-    logger.info("Results: %s", state["results"])
+    # logger.info("Results: %s", state["results"])
     return {}

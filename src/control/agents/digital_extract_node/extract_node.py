@@ -10,7 +10,6 @@ markdown block for the LLM.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.control.agents.digital_extract_node.layout import unify_page
@@ -37,18 +36,18 @@ def extract_pdf(pdf_path: str) -> list[SerialisedPdfBlock]:
         all_pages_ordered.append(ordered)
 
     c = serialise_all(all_pages_ordered)
-    write_markdown(c, Path(pdf_path).with_suffix(".md"))
-    logger.info(c)
+    # write_markdown(c, Path(pdf_path).with_suffix(".md"))
+    # logger.info(c)
     return c
 
 
-def write_markdown(blocks: list[SerialisedPdfBlock], output_path: Path) -> None:
-    with open(output_path, "w", encoding="utf-8") as f:
-        for i, block in enumerate(blocks):
-            f.write(block.text_payload)
+# def write_markdown(blocks: list[SerialisedPdfBlock], output_path: Path) -> None:
+#     with open(output_path, "w", encoding="utf-8") as f:
+#         for i, block in enumerate(blocks):
+#             f.write(block.text_payload)
 
-            if i < len(blocks) - 1:
-                f.write("\n\n---\n\n")
+#             if i < len(blocks) - 1:
+#                 f.write("\n\n---\n\n")
 
 
 def _current_attachment(state: TimeguardState) -> AttachmentState:

@@ -24,7 +24,8 @@ from src.data.models.timesheet import TimesheetStatus
 from src.data.repositories.client_repository import ClientRepository
 from src.data.repositories.email_repository import EmailRepository
 from src.data.repositories.timesheet_repository import TimesheetRepository
-from src.llm_trace_debug import store_llm_result_for_testing
+
+# from src.llm_trace_debug import store_llm_result_for_testing
 
 logger = logging.getLogger(__name__)
 
@@ -339,14 +340,14 @@ async def employee_matching_node(
             )
         await db_session.commit()
         # Store result as JSON file for testing
-        trace_path = store_llm_result_for_testing(
-            source="employee_matching",
-            payload=updated_payload,
-            extra={
-                "email_id": str(email_id),
-            },
-        )
-        logger.info("Stored employee matching result for testing at %s", trace_path)
+        # trace_path = store_llm_result_for_testing(
+        #     source="employee_matching",
+        #     payload=updated_payload,
+        #     extra={
+        #         "email_id": str(email_id),
+        #     },
+        # )
+        # logger.info("Stored employee matching result for testing at %s", trace_path)
 
         await db_session.commit()
         logger.info("Employee matching completed successfully")

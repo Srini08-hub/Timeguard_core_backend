@@ -18,7 +18,8 @@ from src.data.models.email import EmailStatus
 from src.data.repositories.attachment_repository import AttachmentRepository
 from src.data.repositories.content_extract_repository import ContentExtractRepository
 from src.data.repositories.email_repository import EmailRepository
-from src.llm_trace_debug import store_llm_result_for_testing
+
+# from src.llm_trace_debug import store_llm_result_for_testing
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -281,11 +282,11 @@ async def node_extract_block_with_llm(
 
         await db_session.commit()
 
-    trace_path = store_llm_result_for_testing(
-        source="digital",
-        payload=results,
-        extra={"block_count": len(blocks)},
-    )
-    logger.info("Stored digital extraction result for testing at %s", trace_path)
+    # trace_path = store_llm_result_for_testing(
+    #     source="digital",
+    #     payload=results,
+    #     extra={"block_count": len(blocks)},
+    # )
+    # logger.info("Stored digital extraction result for testing at %s", trace_path)
 
     return state

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -252,20 +251,21 @@ def _current_attachment(state: TimeguardState) -> AttachmentState:
 #     return None
 
 
-def _dump_blocks_for_trace(file_path: Path | str, blocks: list[SerialisedBlock]) -> Path:
-    TRACE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# def _dump_blocks_for_trace(file_path: Path | str, blocks: list[SerialisedBlock]) -> Path:
+#     TRACE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    workbook_path = Path(file_path)
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%fZ")
-    trace_path = TRACE_OUTPUT_DIR / f"{workbook_path.stem}_{timestamp}.json"
+#     workbook_path = Path(file_path)
+#     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%fZ")
+#     trace_path = TRACE_OUTPUT_DIR / f"{workbook_path.stem}_{timestamp}.json"
 
-    payload = {
-        "source_workbook": str(workbook_path),
-        "block_count": len(blocks),
-        "blocks": [asdict(block) for block in blocks],
-    }
-    trace_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    return trace_path
+#     payload = {
+#         "source_workbook": str(workbook_path),
+#         "block_count": len(blocks),
+#         "blocks": [asdict(block) for block in blocks],
+#     }
+#     trace_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False),
+#  encoding="utf-8")
+#     return trace_path
 
 
 def excel_extraction_node(state: TimeguardState) -> dict:
@@ -276,9 +276,9 @@ def excel_extraction_node(state: TimeguardState) -> dict:
     if file_path is None:
         raise ValueError("Could not resolve attachment path for Excel extraction")
     blocks = extract_workbook(str(file_path))
-    trace_path = _dump_blocks_for_trace(file_path, blocks)
+    # trace_path = _dump_blocks_for_trace(file_path, blocks)
     logger.info("Probed workbook '%s': found %d sheet block(s).", file_path, len(blocks))
-    logger.info("Saved Excel extraction trace to %s", trace_path)
+    # logger.info("Saved Excel extraction trace to %s", trace_path)
     return {"current_excel_block_index": 0, "blocks": blocks}
 
 
@@ -291,8 +291,8 @@ def extract_workbook(path: str) -> list[SerialisedBlock]:
     """
     # probes = probe_workbook(path, sheet_name=sheet_name)
     probes = probe_workbook(path)
-    logger.info("Probed workbook '%s': found %d sheet(s).", path, len(probes))
-    logger.info("Probed sheets: %s", ", ".join(probes.keys()))
+    # logger.info("Probed workbook '%s': found %d sheet(s).", path, len(probes))
+    # logger.info("Probed sheets: %s", ", ".join(probes.keys()))
 
     results: list[SerialisedBlock] = []
     for index, probe in enumerate(probes.values()):

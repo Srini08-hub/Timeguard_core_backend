@@ -21,7 +21,8 @@ from src.core.exceptions.llm_exception import ExtractionError
 from src.data.models.email import EmailStatus
 from src.data.repositories.content_extract_repository import ContentExtractRepository
 from src.data.repositories.email_repository import EmailRepository
-from src.llm_trace_debug import store_llm_result_for_testing
+
+# from src.llm_trace_debug import store_llm_result_for_testing
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -189,12 +190,12 @@ async def email_body_extraction_node(
         # )
         await _store_body_content_extract_payload(state, config, parsed)
 
-        trace_path = store_llm_result_for_testing(
-            source="email_body",
-            payload=parsed,
-            extra={"gmail_message_id": state.get("gmail_message_id", "")},
-        )
-        logger.info("Stored email body extraction result for testing at %s", trace_path)
+        # trace_path = store_llm_result_for_testing(
+        #     source="email_body",
+        #     payload=parsed,
+        #     extra={"gmail_message_id": state.get("gmail_message_id", "")},
+        # )
+        # logger.info("Stored email body extraction result for testing at %s", trace_path)
 
         # Update email status to EXTRACTED
         db_session = get_db_session(config)
@@ -214,28 +215,28 @@ async def email_body_extraction_node(
         logger.error("Email body extraction failed permanently: %s", exc)
         extraction_failed = True
         failure_reason = str(exc)
-        store_llm_result_for_testing(
-            source="email_body",
-            payload={
-                "success": False,
-                "error": str(exc),
-                "raw_response_on_failure": exc.raw_response,
-            },
-            extra={"gmail_message_id": state.get("gmail_message_id", "")},
-        )
+        # store_llm_result_for_testing(
+        #     source="email_body",
+        #     payload={
+        #         "success": False,
+        #         "error": str(exc),
+        #         "raw_response_on_failure": exc.raw_response,
+        #     },
+        #     extra={"gmail_message_id": state.get("gmail_message_id", "")},
+        # )
     except Exception as e:
         logger.exception("Unexpected error during email body extraction: %s", e)
         extraction_failed = True
         failure_reason = str(e)
-        store_llm_result_for_testing(
-            source="email_body",
-            payload={
-                "success": False,
-                "error": str(e),
-                "raw_response_on_failure": None,
-            },
-            extra={"gmail_message_id": state.get("gmail_message_id", "")},
-        )
+        # store_llm_result_for_testing(
+        #     source="email_body",
+        #     payload={
+        #         "success": False,
+        #         "error": str(e),
+        #         "raw_response_on_failure": None,
+        #     },
+        #     extra={"gmail_message_id": state.get("gmail_message_id", "")},
+        # )
 
     # Update email status if extraction failed
     if extraction_failed and failure_reason:

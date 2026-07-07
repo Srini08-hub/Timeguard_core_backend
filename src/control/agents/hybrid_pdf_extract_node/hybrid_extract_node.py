@@ -23,7 +23,6 @@ from src.data.models.email import EmailStatus
 from src.data.repositories.attachment_repository import AttachmentRepository
 from src.data.repositories.content_extract_repository import ContentExtractRepository
 from src.data.repositories.email_repository import EmailRepository
-from src.llm_trace_debug import store_llm_result_for_testing
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -285,7 +284,7 @@ async def hybrid_pdf_extraction_node(
     )
 
     markdown_payload, page_count = _parse_pdf_to_markdown(file_path)
-    markdown_path = _write_markdown_payload(markdown_payload, file_path)
+    # markdown_path = _write_markdown_payload(markdown_payload, file_path)
 
     system_prompt = build_system_prompt()
     messages = build_extraction_messages(
@@ -311,19 +310,19 @@ async def hybrid_pdf_extraction_node(
             file_name,
             exc,
         )
-        store_llm_result_for_testing(
-            source="hybrid_pdf",
-            payload={
-                "success": False,
-                "error": str(exc),
-                "raw_response_on_failure": exc.raw_response,
-            },
-            extra={
-                "file_name": file_name,
-                "page_count": page_count,
-                "markdown_path": str(markdown_path),
-            },
-        )
+        # store_llm_result_for_testing(
+        #     source="hybrid_pdf",
+        #     payload={
+        #         "success": False,
+        #         "error": str(exc),
+        #         "raw_response_on_failure": exc.raw_response,
+        #     },
+        #     extra={
+        #         "file_name": file_name,
+        #         "page_count": page_count,
+        #         "markdown_path": str(markdown_path),
+        #     },
+        # )
         await _mark_llm_extraction_failed(state, config, str(exc))
         return state
     except Exception as exc:
@@ -332,33 +331,33 @@ async def hybrid_pdf_extraction_node(
             file_name,
             exc,
         )
-        store_llm_result_for_testing(
-            source="hybrid_pdf",
-            payload={
-                "success": False,
-                "error": str(exc),
-                "raw_response_on_failure": None,
-            },
-            extra={
-                "file_name": file_name,
-                "page_count": page_count,
-                "markdown_path": str(markdown_path),
-            },
-        )
+        # store_llm_result_for_testing(
+        #     source="hybrid_pdf",
+        #     payload={
+        #         "success": False,
+        #         "error": str(exc),
+        #         "raw_response_on_failure": None,
+        #     },
+        #     extra={
+        #         "file_name": file_name,
+        #         "page_count": page_count,
+        #         "markdown_path": str(markdown_path),
+        #     },
+        # )
         await _mark_llm_extraction_failed(state, config, str(exc))
         raise exc
 
     await _store_content_extract_payload(state, config, parsed)
 
-    trace_path = store_llm_result_for_testing(
-        source="hybrid_pdf",
-        payload=parsed,
-        extra={
-            "file_name": file_name,
-            "page_count": page_count,
-            "markdown_path": str(markdown_path),
-        },
-    )
-    logger.info("Stored hybrid PDF extraction result for testing at %s", trace_path)
+    # trace_path = store_llm_result_for_testing(
+    #     source="hybrid_pdf",
+    #     payload=parsed,
+    #     extra={
+    #         "file_name": file_name,
+    #         "page_count": page_count,
+    #         "markdown_path": str(markdown_path),
+    #     },
+    # )
+    # logger.info("Stored hybrid PDF extraction result for testing at %s", trace_path)
 
     return state

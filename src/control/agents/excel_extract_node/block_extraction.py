@@ -18,7 +18,6 @@ from src.data.models.email import EmailStatus
 from src.data.repositories.attachment_repository import AttachmentRepository
 from src.data.repositories.content_extract_repository import ContentExtractRepository
 from src.data.repositories.email_repository import EmailRepository
-from src.llm_trace_debug import store_llm_result_for_testing
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -204,15 +203,15 @@ async def node_extract_block_with_llm(
         #     file_name=file_name,
         #     content_type=content_type,
         # )
-        trace_path = store_llm_result_for_testing(
-            source="excel",
-            payload=parsed,
-            extra={
-                "sheet_name": block.sheet_name,
-                "block_index": block.block_index,
-            },
-        )
-        logger.info("Stored Excel extraction result for testing at %s", trace_path)
+        # trace_path = store_llm_result_for_testing(
+        #     source="excel",
+        #     payload=parsed,
+        #     extra={
+        #         "sheet_name": block.sheet_name,
+        #         "block_index": block.block_index,
+        #     },
+        # )
+        # logger.info("Stored Excel extraction result for testing at %s", trace_path)
         await _append_block_result_to_content_extract(state, config, parsed)
 
         result: BlockResult = {

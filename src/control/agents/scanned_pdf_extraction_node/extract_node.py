@@ -25,7 +25,8 @@ from src.data.models.email import EmailStatus
 from src.data.repositories.attachment_repository import AttachmentRepository
 from src.data.repositories.content_extract_repository import ContentExtractRepository
 from src.data.repositories.email_repository import EmailRepository
-from src.llm_trace_debug import store_llm_result_for_testing
+
+# from src.llm_trace_debug import store_llm_result_for_testing
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -300,18 +301,18 @@ async def scanned_pdf_extraction_node(
             file_name,
             exc,
         )
-        store_llm_result_for_testing(
-            source="scanned_pdf",
-            payload={
-                "success": False,
-                "error": str(exc),
-                "raw_response_on_failure": exc.raw_response,
-            },
-            extra={
-                "file_name": file_name,
-                "page_count": len(rendered_pages),
-            },
-        )
+        # store_llm_result_for_testing(
+        #     source="scanned_pdf",
+        #     payload={
+        #         "success": False,
+        #         "error": str(exc),
+        #         "raw_response_on_failure": exc.raw_response,
+        #     },
+        #     extra={
+        #         "file_name": file_name,
+        #         "page_count": len(rendered_pages),
+        #     },
+        # )
         await _mark_scanned_pdf_extraction_failed(state, config, str(exc))
         return state
     except Exception as exc:
@@ -320,31 +321,31 @@ async def scanned_pdf_extraction_node(
             file_name,
             exc,
         )
-        store_llm_result_for_testing(
-            source="scanned_pdf",
-            payload={
-                "success": False,
-                "error": str(exc),
-                "raw_response_on_failure": None,
-            },
-            extra={
-                "file_name": file_name,
-                "page_count": len(rendered_pages),
-            },
-        )
+        # store_llm_result_for_testing(
+        #     source="scanned_pdf",
+        #     payload={
+        #         "success": False,
+        #         "error": str(exc),
+        #         "raw_response_on_failure": None,
+        #     },
+        #     extra={
+        #         "file_name": file_name,
+        #         "page_count": len(rendered_pages),
+        #     },
+        # )
         await _mark_scanned_pdf_extraction_failed(state, config, str(exc))
         return state
 
     await _store_content_extract_payload(state, config, parsed)
 
-    trace_path = store_llm_result_for_testing(
-        source="scanned_pdf",
-        payload=parsed,
-        extra={
-            "file_name": file_name,
-            "page_count": len(rendered_pages),
-        },
-    )
-    logger.info("Stored scanned PDF extraction result for testing at %s", trace_path)
+    # trace_path = store_llm_result_for_testing(
+    #     source="scanned_pdf",
+    #     payload=parsed,
+    #     extra={
+    #         "file_name": file_name,
+    #         "page_count": len(rendered_pages),
+    #     },
+    # )
+    # logger.info("Stored scanned PDF extraction result for testing at %s", trace_path)
 
     return state

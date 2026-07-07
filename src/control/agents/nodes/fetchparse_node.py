@@ -52,14 +52,6 @@ async def fetch_parse_node(
             "Failed to fetch Gmail message %s",
             state["gmail_message_id"],
         )
-        # email = await email_repo.create_failed_fetch(
-        #     gmail_message_id=state["gmail_message_id"],
-        #     failure_stage="fetch_email",
-        #     failure_reason=str(exc),
-        #     received_at=datetime.now(UTC),
-        # )
-        # await db_session.commit()
-
         return TimeguardState(
             gmail_message_id=state["gmail_message_id"],
             attachment_ids=[],
