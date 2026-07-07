@@ -123,6 +123,14 @@ async def get_checkpointer() -> AsyncPostgresSaver:
     return _checkpointer
 
 
+async def close_checkpointer() -> None:
+    global _checkpointer, _checkpointer_cm
+    if _checkpointer_cm is not None:
+        await _checkpointer_cm.__aexit__(None, None, None)
+        _checkpointer_cm = None
+        _checkpointer = None
+
+
 async def build_email_graph() -> CompiledStateGraph[TimeguardState]:
     graph = StateGraph(TimeguardState)
 
@@ -212,15 +220,7 @@ async def build_email_graph() -> CompiledStateGraph[TimeguardState]:
     )
     graph.add_edge("scanned_pdf_node", "scanned_next_page")
     graph.add_edge("scanned_next_page", "scanned_call_vision_llm")
-    # graph.add_edge("scanned_load_pages", "scanned_next_page")
-    # graph.add_conditional_edges(
-    #     "scanned_next_page",
-    #     route_after_next_page,
-    #     {
-    #         "scanned_call_vision_llm": "scanned_call_vision_llm",
-    #         "done": "increment_attachment_node",
-    #     },
-    # )
+
     graph.add_conditional_edges(
         "scanned_call_vision_llm",
         route_after_vision_llm,
@@ -293,14 +293,7 @@ async def build_email_graph() -> CompiledStateGraph[TimeguardState]:
 
     graph.add_node("extract_block_with_llm", node_extract_block_with_llm)
     graph.add_edge("excel_extraction_node", "extract_block_with_llm")
-    # graph.add_conditional_edges(
-    #     "excel_extraction_node",
-    #     route_next_block,
-    #     {
-    #         "extract_block_with_llm": "extract_block_with_llm",
-    #         "done": "increment_extraction_node",
-    #     },
-    # )
+
     graph.add_edge("extract_block_with_llm", "increment_excel_block")
     graph.add_conditional_edges(
         "increment_excel_block",
@@ -311,9 +304,6 @@ async def build_email_graph() -> CompiledStateGraph[TimeguardState]:
         },
     )
 
-    # graph.add_node("collect_results", node_collect_results)
-
-    # graph.add_edge("collect_results", "increment_extraction_node")
     graph.add_edge("digital_pdf_extraction_node", "digital_node_extract_block_with_llm")
     graph.add_edge("digital_node_extract_block_with_llm", "increment_extraction_node")
     graph.add_edge("scanned_pdf_extraction_node", "increment_extraction_node")
@@ -338,7 +328,6 @@ async def build_email_graph() -> CompiledStateGraph[TimeguardState]:
             "excel_extraction_node": "excel_extraction_node",
             "email_body_extraction_node": "email_body_extraction_node",
             "increment_extraction_node": "increment_extraction_node",
-            # "merge_node": "merge_node",
             "end": END,
         },
     )

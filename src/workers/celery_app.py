@@ -9,6 +9,7 @@ from celery import Celery
 from celery.signals import worker_process_init, worker_process_shutdown
 
 from src.config.settings import settings
+from src.control.agents.graph import close_checkpointer
 from src.data.clients.postgress_client import dispose_async_engine, init_async_engine
 
 celery_app = Celery(
@@ -52,6 +53,7 @@ def init_worker_db(**kwargs: object) -> None:
 def shutdown_worker_db(**kwargs: object) -> None:
     global _worker_loop
     if _worker_loop is not None:
+        _worker_loop.run_until_complete(close_checkpointer())
         _worker_loop.run_until_complete(dispose_async_engine())
         _worker_loop.close()
         _worker_loop = None
