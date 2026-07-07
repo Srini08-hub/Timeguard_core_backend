@@ -5,7 +5,7 @@ from __future__ import annotations
 SYSTEM_PROMPT = """You are an email timesheet normalization engine. Extract and normalize the email subject/body into the canonical timesheet schema.
 
 ### INPUT
-You will receive an email subject and body. The body may contain plain text, quoted replies, forwarded content, or simple text tables.
+You will receive an email subject and body. The body may contain plain text, or simple text tables.
 The user message includes source metadata. Use that exact source file_name and content_type in every employee record.
 
 ### TASK
@@ -25,6 +25,7 @@ Return structured data matching the canonical schema:
       "timesheet_records": [
         {
           "date": "YYYY-MM-DD or null",
+          "day": "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday or null",
           "check_in": "HH:MM or null",
           "check_out": "HH:MM or null",
           "break_hour": "HH:MM or null",
@@ -45,8 +46,6 @@ Identify:
 - Use only information explicitly stated in the subject/body. Do not invent missing employees, dates, times, or hours.
 - If a field is not mentioned, set the schema field to null or omit the employee/record when no timesheet data exists.
 - If the email has no timesheet/hours data at all, return employee_records as an empty list and only fill global_data fields that are explicitly present.
-- If a value is mentioned but unclear, conflicting, or ambiguous, set that field to null.
-- Ignore fields that are completely unrecognized and do not map to a schema key, but never drop a row because some fields are unrecognized.
 
 ### NORMALIZATION RULES
 - Global aliases: client_name = Client, Client Name, Customer, Company, Organization, Vendor, Employer. week_ending = Week Ending, Week End, WeekEnding, Week_End, Week Ending Date, Period Ending, Pay Period End, Ending Date. department = Department, Dept, Division, Business Unit, BU, Section.
@@ -60,12 +59,13 @@ Identify:
 - If department is stated globally, apply it to all employee records unless a more specific employee-level department is present.
 
 ### DATE RULES
-- Normalize all output dates to YYYY-MM-DD.
 - When parsing dates, try India format first: DD/MM/YYYY or DD/MM/YY. If that fails, try US format: MM/DD/YYYY or MM/DD/YY. Also handle ISO/textual dates when explicitly present.
-- If no week ending is present in the source, set global_data.week_ending to null. Do not assume it.
+- Normalize all output dates to YYYY-MM-DD.
+- If no week ending is present in the body or subject, set global_data.week_ending to null. Do not assume it.
 - Never output weekday names as dates. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
 - Example: if week_ending = 2026-06-28, Monday -> 2026-06-22, Tuesday -> 2026-06-23, Wednesday -> 2026-06-24, Thursday -> 2026-06-25, Friday -> 2026-06-26, Saturday -> 2026-06-27, Sunday -> 2026-06-28.
 - If a row only has a weekday name and week_ending is unknown, set date to null.
+- Always populate the day field. If the source explicitly provides a day name (e.g., Monday, Tue), use that full day name. If only a date is provided, calculate the day from the date (e.g., 2026-06-22 -> Monday). If neither date nor day is available, set day to null.
 
 ### HOURS ROUTING
 - Use employee-level total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.
@@ -101,8 +101,8 @@ Output:
         "total_hours": null,
         "source": [{"file_name": "email", "content_type": "email"}],
         "timesheet_records": [
-          {"date": "2026-06-22", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null},
-          {"date": "2026-06-23", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null}
+          {"date": "2026-06-22", "day": "Monday", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null},
+          {"date": "2026-06-23", "day": "Tuesday", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null}
         ]
       }
     ]
@@ -151,6 +151,7 @@ def build_extraction_messages(
 #       "timesheet_records": [
 #         {
 #           "date": "YYYY-MM-DD or null",
+#           "day": "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday or null",
 #           "check_in": "HH:MM or null",
 #           "check_out": "HH:MM or null",
 #           "break_hour": "HH:MM or null",

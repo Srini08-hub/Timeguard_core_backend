@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -32,7 +30,7 @@ from src.llm_trace_debug import store_llm_result_for_testing
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 2
+MAX_RETRIES = 1
 MODEL_NAME = "gemini-2.5-flash"
 
 
@@ -112,19 +110,19 @@ def _extract_structured(
     )
 
 
-def _apply_source_metadata(
-    payload: dict[str, Any],
-    *,
-    file_name: str,
-    content_type: str,
-) -> dict[str, Any]:
-    source = {"file_name": file_name, "content_type": content_type}
-    employee_records = payload.get("employee_records")
-    if isinstance(employee_records, list):
-        for employee_record in employee_records:
-            if isinstance(employee_record, dict):
-                employee_record["source"] = [source]
-    return payload
+# def _apply_source_metadata(
+#     payload: dict[str, Any],
+#     *,
+#     file_name: str,
+#     content_type: str,
+# ) -> dict[str, Any]:
+#     source = {"file_name": file_name, "content_type": content_type}
+#     employee_records = payload.get("employee_records")
+#     if isinstance(employee_records, list):
+#         for employee_record in employee_records:
+#             if isinstance(employee_record, dict):
+#                 employee_record["source"] = [source]
+#     return payload
 
 
 def _current_attachment(state: TimeguardState) -> AttachmentState:
@@ -135,24 +133,24 @@ def _current_attachment(state: TimeguardState) -> AttachmentState:
     return attachments[index]
 
 
-def _resolve_attachment_path(attachment: AttachmentState) -> Path:
-    attachment_url = attachment.get("attachment_url")
-    if attachment_url:
-        parsed_url = urlparse(attachment_url)
-        candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
-        if candidate.exists():
-            return candidate
+# def _resolve_attachment_path(attachment: AttachmentState) -> Path:
+#     attachment_url = attachment.get("attachment_url")
+#     if attachment_url:
+#         parsed_url = urlparse(attachment_url)
+#         candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
+#         if candidate.exists():
+#             return candidate
 
-    file_name = attachment.get("file_name")
-    if file_name:
-        matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
-        if matches:
-            return matches[0]
+#     file_name = attachment.get("file_name")
+#     if file_name:
+#         matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
+#         if matches:
+#             return matches[0]
 
-    raise FileNotFoundError(
-        f"Unable to resolve a stored file for attachment "
-        f"{attachment.get('file_name', '<unknown>')}"
-    )
+#     raise FileNotFoundError(
+#         f"Unable to resolve a stored file for attachment "
+#         f"{attachment.get('file_name', '<unknown>')}"
+#     )
 
 
 async def _store_content_extract_payload(

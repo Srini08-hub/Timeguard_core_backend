@@ -150,7 +150,6 @@ async def _resolve_client_and_department(
 async def _get_candidate_employees(
     db_session: AsyncSession,
     client: Client,
-    department: Department | None,
 ) -> list[dict[str, Any]]:
     stmt = (
         select(Assignment, Employee, Department)
@@ -163,9 +162,6 @@ async def _get_candidate_employees(
             Department.is_active.is_(True),
         )
     )
-
-    if department is not None:
-        stmt = stmt.where(Assignment.department_id == department.department_id)
 
     result = await db_session.execute(stmt)
     candidates: list[dict[str, Any]] = []
@@ -204,34 +200,6 @@ def _build_similarity_matrix(
     return matrix
 
 
-# def _calculate_hours_from_check_in_out(records: list[dict[str, Any]])
-# -> list[dict[str, Any]]:
-#     """Calculate hours from check_in and check_out if hours is not provided."""
-#     for record in records:
-#         timesheet_records = record.get("timesheet_records") or []
-#         if not isinstance(timesheet_records, list):
-#             continue
-
-#         for timesheet_record in timesheet_records:
-#             if not isinstance(timesheet_record, dict):
-#                 continue
-
-#             hours = _to_decimal(timesheet_record.get("hours"))
-#             total_hours = _to_decimal(timesheet_record.get("total_hours"))
-#             check_in = timesheet_record.get("check_in")
-#             check_out = timesheet_record.get("check_out")
-
-#             # If hours not given but check_in and check_out are given, calculate and store
-#  hours
-#             if hours is None and total_hours is None and not _is_missing(check_in)
-#  and not _is_missing(check_out):
-#                 calculated_hours = _duration_hours(check_in, check_out)
-#                 if calculated_hours is not None:
-#                     timesheet_record["hours"] = str(calculated_hours)
-
-#     return records
-
-
 def _match_employees(
     extracted_records: list[dict[str, Any]],
     candidates: list[dict[str, Any]],
@@ -253,10 +221,27 @@ def _match_employees(
     )
 
     cost_matrix: list[list[float]] = []
-    for row in similarity_matrix:
+    for row_index, row in enumerate(similarity_matrix):
         cost_row = []
-        for score in row:
-            cost_row.append(100.0 - score if score >= MIN_MATCHING_SCORE else NON_MATCH_COST)
+        extracted_department = enriched_records[row_index].get("department")
+        for col_index, score in enumerate(row):
+            # Check if department matches (if specified in extracted record)
+            if extracted_department:
+                candidate_department = candidates[col_index].get("department")
+                if candidate_department and (
+                    _normalize_name(extracted_department)
+                    != _normalize_name(candidate_department)
+                ):
+                    # Department mismatch, set high cost
+                    cost_row.append(NON_MATCH_COST)
+                else:
+                    cost_row.append(
+                        100.0 - score if score >= MIN_MATCHING_SCORE else NON_MATCH_COST
+                    )
+            else:
+                cost_row.append(
+                    100.0 - score if score >= MIN_MATCHING_SCORE else NON_MATCH_COST
+                )
         cost_matrix.append(cost_row)
 
     row_indices, col_indices = linear_sum_assignment(cost_matrix)
@@ -304,16 +289,6 @@ async def employee_matching_node(
         if not week_ending:
             raise ValueError("week_ending is not available in payload")
 
-        # Validate department is present
-        department_name = global_data.get("department")
-        if not department_name:
-            # Check if department is available in employee records
-            employee_records = payload.get("employee_records") or []
-            if employee_records and employee_records[0].get("department"):
-                department_name = employee_records[0].get("department")
-            else:
-                raise ValueError("department is not available in payload")
-
         client, department = await _resolve_client_and_department(state, config)
 
         # Check if client_name was provided but no match found
@@ -327,13 +302,15 @@ async def employee_matching_node(
             raise ValueError("Client could not be resolved")
 
         db_session = get_db_session(config)
-        candidates = await _get_candidate_employees(db_session, client, department)
+        # Get all candidates across all departments for the client
+        # Department-specific filtering will be done per-employee after matching
+        candidates = await _get_candidate_employees(db_session, client)
 
         global_data = dict(payload.get("global_data") or {})
         global_data["client_name"] = client.client_name
 
-        if department is not None:
-            global_data["department"] = department.department_name
+        # if department is not None:
+        #     global_data["department"] = department.department_name
 
         enriched_records = _match_employees(
             list(payload.get("employee_records") or []),

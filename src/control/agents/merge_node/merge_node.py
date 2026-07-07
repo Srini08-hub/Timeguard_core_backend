@@ -144,10 +144,10 @@ def _normalize_weekday_dates(
         for timesheet_record in timesheet_records:
             if not isinstance(timesheet_record, dict):
                 continue
-            date_value = timesheet_record.get("date")
-            if not isinstance(date_value, str):
+            day_value = timesheet_record.get("day")
+            if not isinstance(day_value, str):
                 continue
-            weekday_offset = _WEEKDAY_OFFSETS.get(date_value.strip().casefold())
+            weekday_offset = _WEEKDAY_OFFSETS.get(day_value.strip().lower())
             if weekday_offset is None:
                 continue
             if week_ending is None:
@@ -220,7 +220,7 @@ def _first_present(current: Any, incoming: Any) -> Any:
 
 
 def _employee_key(employee_name: Any) -> str:
-    return " ".join(str(employee_name or "").casefold().split())
+    return " ".join(str(employee_name or "").lower().split())
 
 
 def _merge_source_lists(
@@ -319,77 +319,6 @@ def _combine_merge_payloads(extracted_payloads: list[dict[str, Any]]) -> dict[st
 
     combined["employee_records"] = list(employees_by_key.values())
     return MergeResponse.model_validate(combined).model_dump()
-
-
-# LLM merge implementation preserved for reference. It is intentionally not active
-# because merge is currently deterministic.
-#
-# def _strip_json_fences(text: str) -> str:
-#     cleaned = text.strip()
-#     if cleaned.startswith("```"):
-#         lines = cleaned.splitlines()
-#         if lines and lines[0].startswith("```"):
-#             lines = lines[1:]
-#         if lines and lines[-1].strip().startswith("```"):
-#             lines = lines[:-1]
-#         cleaned = "\n".join(lines).strip()
-#     return cleaned
-#
-#
-# def _parse_merge_response(raw_response: str) -> MergeResponse:
-#     parsed = json.loads(_strip_json_fences(raw_response))
-#     return MergeResponse.model_validate(parsed)
-#
-#
-# def _merge_with_llm(extracted_payloads: list[dict[str, Any]]) -> dict[str, Any]:
-#     system_prompt = build_system_prompt()
-#     messages = build_merge_messages(extracted_payloads)
-#     llm = ChatGroq(
-#         model_name="llama-3.3-70b-versatile",
-#         temperature=0,
-#         api_key=settings.GROQ_API_KEY_2,
-#     ).bind(response_format={"type": "json_object"})
-#     thread = [
-#         SystemMessage(content=system_prompt),
-#         HumanMessage(content=messages[0]["content"]),
-#     ]
-#     last_error = ""
-#
-#     for attempt in range(1, MAX_MERGE_RETRIES + 2):
-#         raw_response = ""
-#         try:
-#             response = llm.invoke(thread)
-#             content = response.content
-#             raw_response = content if isinstance(content, str) else str(content)
-#             return _parse_merge_response(raw_response).model_dump()
-#         except Exception as exc:
-#             last_error = str(exc)
-#             logger.warning(
-#                 "Merge LLM attempt %d/%d failed: %s",
-#                 attempt,
-#                 MAX_MERGE_RETRIES + 1,
-#                 exc,
-#             )
-#             if attempt <= MAX_MERGE_RETRIES:
-#                 thread.append(
-#                     HumanMessage(
-#                         content=(
-#                             "The previous merge response failed JSON/schema validation "
-#                             f"with this error:\n\n{last_error}\n\n"
-#                             "Return ONLY a valid JSON object with top-level "
-#                             "global_data and employee_records. Do not put "
-#                             "global_data inside employee_records. Do not include "
-#                             "weekday names such as Monday in date; use YYYY-MM-DD "
-#                             "when week_ending is known, otherwise null. Every item "
-#                             "in employee_records must have employee_name, source, "
-#                             "and timesheet_records."
-#                         )
-#                     )
-#                 )
-#                 if raw_response:
-#                     thread.append(HumanMessage(content=f"Bad response was:\n{raw_response}"))
-#
-#     raise ValueError(f"Merge LLM failed after retries: {last_error}")
 
 
 async def merge_node(

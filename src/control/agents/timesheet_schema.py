@@ -9,6 +9,7 @@ class TimesheetRecord(BaseModel):
     """Timesheet record in timesheet."""
 
     date: str | None = Field(description="Date in YYYY-MM-DD format")
+    day: str | None = Field(default=None, description="Day of the week (e.g.,Monday,Tuesday)")
     check_in: str | None = Field(default=None, description="Check-in time in HH:MM format")
     check_out: str | None = Field(default=None, description="Check-out time in HH:MM format")
     break_hour: str | None = Field(default=None, description="Break time in HH:MM format")

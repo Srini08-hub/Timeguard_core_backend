@@ -28,6 +28,7 @@ Return structured data matching the canonical schema:
       "timesheet_records": [
         {
           "date": "YYYY-MM-DD or null",
+          "day": "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday or null",
           "check_in": "HH:MM or null",
           "check_out": "HH:MM or null",
           "break_hour": "HH:MM or null",
@@ -61,6 +62,7 @@ Strip coordinate and layout noise ("R5:", "A5:", merged-cell descriptors, sheet 
 - Never output weekday names as dates. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
 - Example: if week_ending = 2026-06-28, Monday -> 2026-06-22, Tuesday -> 2026-06-23, Wednesday -> 2026-06-24, Thursday -> 2026-06-25, Friday -> 2026-06-26, Saturday -> 2026-06-27, Sunday -> 2026-06-28.
 - If a row only has a weekday name and week_ending is unknown, set date to null.
+- Always populate the day field. If the source explicitly provides a day name (e.g., Monday, Tue), use that full day name. If only a date is provided, calculate the day from the date (e.g., 2026-06-22 -> Monday). If neither date nor day is available, set day to null.
 
 ### HOURS ROUTING
 - Use employee-level total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.
@@ -101,8 +103,8 @@ Output:
         "total_hours": null,
         "source": [{"file_name": "timesheet.xlsx", "content_type": "excel"}],
         "timesheet_records": [
-          {"date": "2026-06-22", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null},
-          {"date": "2026-06-23", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null}
+          {"date": "2026-06-22", "day": "Monday", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null},
+          {"date": "2026-06-23", "day": "Tuesday", "check_in": null, "check_out": null, "break_hour": null, "hours": "8", "overtime_hours": null, "confidence": null}
         ]
       }
     ]
@@ -151,6 +153,7 @@ def build_extraction_messages(
 #       "timesheet_records": [
 #         {
 #           "date": "YYYY-MM-DD or null",
+#           "day": "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday or null",
 #           "check_in": "HH:MM or null",
 #           "check_out": "HH:MM or null",
 #           "break_hour": "HH:MM or null",

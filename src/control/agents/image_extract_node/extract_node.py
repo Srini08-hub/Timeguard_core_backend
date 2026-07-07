@@ -30,7 +30,7 @@ from src.llm_trace_debug import store_llm_result_for_testing
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 2
+MAX_RETRIES = 1
 MODEL_NAME = "gemini-2.5-flash"
 
 
@@ -42,8 +42,6 @@ def _to_langchain_messages(messages: list[dict], system: str) -> list:
         if role == "user":
             lc_messages.append(HumanMessage(content=content))
         elif role == "assistant":
-            if not isinstance(content, str):
-                raise ValueError("Assistant message content must be a string")
             lc_messages.append(AIMessage(content=content))
         else:
             raise ValueError(f"Unexpected message role: {role!r}")
@@ -68,15 +66,13 @@ def _extract_structured(
     for attempt in range(1, max_retries + 2):
         try:
             response = structured_llm.invoke(_to_langchain_messages(thread, system_prompt))
-            if not isinstance(response, MergeResponse):
-                raise TypeError(f"Invalid image extraction response type: {type(response)!r}")
             if attempt > 1:
                 logger.info(
                     "Structured image extraction succeeded on attempt %d/%d",
                     attempt,
                     max_retries + 1,
                 )
-            return response
+            return MergeResponse.model_validate(response)
         except Exception as exc:
             last_error = str(exc)
             logger.warning(
@@ -108,19 +104,19 @@ def _extract_structured(
     )
 
 
-def _apply_source_metadata(
-    payload: dict[str, Any],
-    *,
-    file_name: str,
-    content_type: str,
-) -> dict[str, Any]:
-    source = {"file_name": file_name, "content_type": content_type}
-    employee_records = payload.get("employee_records")
-    if isinstance(employee_records, list):
-        for employee_record in employee_records:
-            if isinstance(employee_record, dict):
-                employee_record["source"] = [source]
-    return payload
+# def _apply_source_metadata(
+#     payload: dict[str, Any],
+#     *,
+#     file_name: str,
+#     content_type: str,
+# ) -> dict[str, Any]:
+#     source = {"file_name": file_name, "content_type": content_type}
+#     employee_records = payload.get("employee_records")
+#     if isinstance(employee_records, list):
+#         for employee_record in employee_records:
+#             if isinstance(employee_record, dict):
+#                 employee_record["source"] = [source]
+#     return payload
 
 
 def _current_attachment(state: TimeguardState) -> AttachmentState:

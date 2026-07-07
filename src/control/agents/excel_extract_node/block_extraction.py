@@ -77,18 +77,17 @@ def _extract_structured(
                 exc,
             )
             if attempt <= max_retries:
-                continue
-                # thread = thread + [
-                #     {
-                #         "role": "user",
-                #         "content": (
-                #             "The previous structured extraction failed with this error:\n\n"
-                #             f"{last_error}\n\n"
-                #             "Fix only that issue and return data matching the "
-                #             "structured schema."
-                #         ),
-                #     }
-                # ]
+                thread = thread + [
+                    {
+                        "role": "user",
+                        "content": (
+                            "The previous structured extraction failed with this error:\n\n"
+                            f"{last_error}\n\n"
+                            "Fix only that issue and return data matching the "
+                            "structured schema."
+                        ),
+                    }
+                ]
 
     raise ExtractionError(
         message=(

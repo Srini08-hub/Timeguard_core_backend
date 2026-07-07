@@ -117,7 +117,7 @@ def _week_ending_from_payload(payload: dict[str, Any], fallback: date | None) ->
         return parsed
     if fallback is not None:
         return fallback
-    return date.today()
+    raise ValueError("Week ending is missing from payload and no fallback was provided.")
 
 
 def _exception_reason(
@@ -338,93 +338,114 @@ async def validation_node(
         logger.warning("Skipping validation because state.email_id is missing")
         return state
 
-    exception_repository = ExceptionRepository(db_session)
-    timecard_repository = TimecardRepository(db_session)
-    timesheet_repository = TimesheetRepository(db_session)
-    email_repository = EmailRepository(db_session)
-    timesheet = await timesheet_repository.get_by_email_id(email_id=email_id)
-    if timesheet is None or not isinstance(timesheet.payload, dict):
-        logger.warning(
-            "Skipping validation because payload is missing for email %s",
-            email_id,
-        )
+    try:
+        exception_repository = ExceptionRepository(db_session)
+        timecard_repository = TimecardRepository(db_session)
+        timesheet_repository = TimesheetRepository(db_session)
+        email_repository = EmailRepository(db_session)
+        timesheet = await timesheet_repository.get_by_email_id(email_id=email_id)
+        if timesheet is None or not isinstance(timesheet.payload, dict):
+            logger.warning(
+                "Skipping validation because payload is missing for email %s",
+                email_id,
+            )
+            return state
+
+        payload = timesheet.payload
+        employee_records = list(payload.get("employee_records") or [])
+        week_ending = _week_ending_from_payload(payload, timesheet.week_ending)
+
+        # await timecard_repository.delete_by_timesheet(timesheet.timesheet_id)
+
+        for employee in employee_records:
+            employee_name = employee.get("employee_name")
+            failures = _validate_employee_record(employee)
+            severities = [severity for _, severity, _ in failures]
+            status = TimecardStatus.EXCEPTION if failures else TimecardStatus.NO_EXCEPTION
+            severity = _max_severity(severities)
+
+            # Skip calculations if emp_id is missing
+            emp_id_missing = any(
+                exc_type == ExceptionType.MISSING_EMPLOYEE_ID for exc_type, _, _ in failures
+            )
+
+            if emp_id_missing:
+                # Create timecard with null hours when emp_id is missing
+                timecard = await timecard_repository.create_generated_timecard(
+                    timesheet_id=timesheet.timesheet_id,
+                    emp_id=_uuid_or_none(employee.get("emp_id")),
+                    assignment_id=_uuid_or_none(employee.get("assignment_id")),
+                    rule_id=None,
+                    week_ending=week_ending,
+                    employee_name=employee_name,
+                    reg_hours=None,
+                    ot_hours=None,
+                    dt_hours=None,
+                    status=status,
+                    severity=TimecardSeverity(severity.value),
+                )
+            else:
+                # Normal calculation flow when emp_id is present
+                rule = await _get_rule_for_assignment(
+                    db_session, employee.get("assignment_id")
+                )
+                payable_hours = _payable_weekly_hours(employee, rule)
+                reg_hours, ot_hours, dt_hours = _split_hours(payable_hours, rule)
+
+                timecard = await timecard_repository.create_generated_timecard(
+                    timesheet_id=timesheet.timesheet_id,
+                    emp_id=_uuid_or_none(employee.get("emp_id")),
+                    assignment_id=_uuid_or_none(employee.get("assignment_id")),
+                    rule_id=rule.rule_id if rule is not None else None,
+                    week_ending=week_ending,
+                    employee_name=employee_name,
+                    reg_hours=reg_hours,
+                    ot_hours=ot_hours,
+                    dt_hours=dt_hours,
+                    status=status,
+                    severity=TimecardSeverity(severity.value),
+                )
+            exception_entries = [
+                (
+                    exc_severity,
+                    exc_type,
+                    _exception_reason(exc_type, employee_name, record),
+                )
+                for exc_type, exc_severity, record in failures
+            ]
+            await exception_repository.create_many_for_timecard(
+                timecard_id=timecard.timecard_id,
+                entries=exception_entries,
+            )
+
+        timesheet.status = TimesheetStatus.UNDER_REVIEW
+
+        # Update email status to indicate successful validation
+        email = await email_repository.get_by_id(email_id)
+        if email:
+            await email_repository.set_status(email, EmailStatus.PROCESSED)
+            logger.info(
+                "Email %s status updated to PROCESSED    after successful validation", email_id
+            )
+
+        await db_session.commit()
+        logger.info("Validation completed for email %s", email_id)
         return state
 
-    payload = timesheet.payload
-    employee_records = list(payload.get("employee_records") or [])
-    week_ending = _week_ending_from_payload(payload, timesheet.week_ending)
+    except Exception as e:
+        logger.error("Validation failed for email %s: %s", email_id, e)
 
-    # await timecard_repository.delete_by_timesheet(timesheet.timesheet_id)
-
-    for employee in employee_records:
-        employee_name = employee.get("employee_name")
-        failures = _validate_employee_record(employee)
-        severities = [severity for _, severity, _ in failures]
-        status = TimecardStatus.EXCEPTION if failures else TimecardStatus.NO_EXCEPTION
-        severity = _max_severity(severities)
-
-        # Skip calculations if emp_id is missing
-        emp_id_missing = any(
-            exc_type == ExceptionType.MISSING_EMPLOYEE_ID for exc_type, _, _ in failures
-        )
-
-        if emp_id_missing:
-            # Create timecard with null hours when emp_id is missing
-            timecard = await timecard_repository.create_generated_timecard(
-                timesheet_id=timesheet.timesheet_id,
-                emp_id=_uuid_or_none(employee.get("emp_id")),
-                assignment_id=_uuid_or_none(employee.get("assignment_id")),
-                rule_id=None,
-                week_ending=week_ending,
-                employee_name=employee_name,
-                reg_hours=None,
-                ot_hours=None,
-                dt_hours=None,
-                status=status,
-                severity=TimecardSeverity(severity.value),
+        # Update email status to FAILED with failure stage and reason
+        email_repository = EmailRepository(db_session)
+        email = await email_repository.get_by_id(email_id)
+        if email:
+            await email_repository.set_status(
+                email,
+                EmailStatus.FAILED,
+                failure_stage="validation",
+                failure_reason=str(e),
             )
-        else:
-            # Normal calculation flow when emp_id is present
-            rule = await _get_rule_for_assignment(db_session, employee.get("assignment_id"))
-            payable_hours = _payable_weekly_hours(employee, rule)
-            reg_hours, ot_hours, dt_hours = _split_hours(payable_hours, rule)
+            logger.info("Set email %s status to FAILED with stage 'validation'", email_id)
 
-            timecard = await timecard_repository.create_generated_timecard(
-                timesheet_id=timesheet.timesheet_id,
-                emp_id=_uuid_or_none(employee.get("emp_id")),
-                assignment_id=_uuid_or_none(employee.get("assignment_id")),
-                rule_id=rule.rule_id if rule is not None else None,
-                week_ending=week_ending,
-                employee_name=employee_name,
-                reg_hours=reg_hours,
-                ot_hours=ot_hours,
-                dt_hours=dt_hours,
-                status=status,
-                severity=TimecardSeverity(severity.value),
-            )
-        exception_entries = [
-            (
-                exc_severity,
-                exc_type,
-                _exception_reason(exc_type, employee_name, record),
-            )
-            for exc_type, exc_severity, record in failures
-        ]
-        await exception_repository.create_many_for_timecard(
-            timecard_id=timecard.timecard_id,
-            entries=exception_entries,
-        )
-
-    timesheet.status = TimesheetStatus.UNDER_REVIEW
-
-    # Update email status to indicate successful validation
-    email = await email_repository.get_by_id(email_id)
-    if email:
-        await email_repository.set_status(email, EmailStatus.PROCESSED)
-        logger.info(
-            "Email %s status updated to PROCESSED    after successful validation", email_id
-        )
-
-    await db_session.commit()
-    logger.info("Validation completed for email %s", email_id)
-    return state
+        await db_session.commit()
+        raise e

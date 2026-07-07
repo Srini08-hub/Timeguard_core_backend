@@ -16,7 +16,7 @@ Return structured data matching the canonical schema:
 {
   "global_data": {
     "client_name": "string or null",
-    "week_ending": "YYYY-MM-DD or null"
+    "week_ending": "YYYY-MM-DD or null",
   },
   "employee_records": [
     {
@@ -27,6 +27,7 @@ Return structured data matching the canonical schema:
       "timesheet_records": [
         {
           "date": "YYYY-MM-DD or null",
+          "day": "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday or null",
           "check_in": "HH:MM or null",
           "check_out": "HH:MM or null",
           "break_hour": "HH:MM or null",
@@ -56,12 +57,13 @@ Identify:
 - Record aliases: check_in = In, In Time, Clock In, Start Time, Login, Punch In, in_time. check_out = Out, Out Time, Clock Out, End Time, Logout, Punch Out, out_time. break_hour = Break, Lunch, Meal Break, Break Time. hours = Hours, Worked Hours, Regular Hours. total_hours = Total Hours, Weekly Hours, Weekly Total. overtime_hours = OT, Overtime, OT Hours.
 
 ### DATE RULES
-- Normalize all output dates to YYYY-MM-DD.
 - When parsing dates, try India format first: DD/MM/YYYY or DD/MM/YY. If that fails, try US format: MM/DD/YYYY or MM/DD/YY. Also handle ISO/textual dates when explicitly visible.
+- Normalize all output dates to YYYY-MM-DD.
 - If no week ending is visible, set global_data.week_ending to null. Do not assume it.
 - Never output weekday names as dates. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
 - Example: if week_ending = 2026-06-28, Monday -> 2026-06-22, Tuesday -> 2026-06-23, Wednesday -> 2026-06-24, Thursday -> 2026-06-25, Friday -> 2026-06-26, Saturday -> 2026-06-27, Sunday -> 2026-06-28.
 - If a row only has a weekday name and week_ending is unknown, set date to null.
+- Always populate the day field. If the source explicitly provides a day name (e.g., Monday, Tue), use that full day name. If only a date is provided, calculate the day from the date (e.g., 2026-06-22 -> Monday). If neither date nor day is available, set day to null.
 
 ### HOURS ROUTING
 - Use employee-level total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.

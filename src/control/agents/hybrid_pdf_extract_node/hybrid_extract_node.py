@@ -28,7 +28,7 @@ from src.llm_trace_debug import store_llm_result_for_testing
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 2
+MAX_RETRIES = 1
 MODEL_NAME = "llama-3.3-70b-versatile"
 
 
@@ -84,18 +84,18 @@ def _extract_structured(
                 exc,
             )
             if attempt <= max_retries:
-                continue
-                # thread = thread + [
-                #     {
-                #         "role": "user",
-                #         "content": (
-                #             "The previous structured extraction failed with this error:\n\n"
-                #             f"{last_error}\n\n"
-                #             "Fix only that issue and return data matching the "
-                #             "structured schema."
-                #         ),
-                #     }
-                # ]
+                # continue
+                thread = thread + [
+                    {
+                        "role": "user",
+                        "content": (
+                            "The previous structured extraction failed with this error:\n\n"
+                            f"{last_error}\n\n"
+                            "Fix only that issue and return data matching the "
+                            "structured schema."
+                        ),
+                    }
+                ]
 
     raise ExtractionError(
         message=(
@@ -299,11 +299,12 @@ async def hybrid_pdf_extraction_node(
             system_prompt=system_prompt,
             messages=messages,
         )
-        parsed = _apply_source_metadata(
-            response.model_dump(),
-            file_name=file_name,
-            content_type=content_type,
-        )
+        parsed = response.model_dump()
+        # parsed = _apply_source_metadata(
+        #     response.model_dump(),
+        #     file_name=file_name,
+        #     content_type=content_type,
+        # )
     except ExtractionError as exc:
         logger.error(
             "Hybrid PDF extraction failed permanently for attachment %s: %s",

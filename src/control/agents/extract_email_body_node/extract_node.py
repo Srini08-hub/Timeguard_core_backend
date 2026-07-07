@@ -26,7 +26,7 @@ from src.llm_trace_debug import store_llm_result_for_testing
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 2
+MAX_RETRIES = 1
 MODEL_NAME = "llama-3.3-70b-versatile"
 
 
@@ -55,50 +55,52 @@ def _extract_structured(
         api_key=settings.GROQ_API_KEY_1,
         temperature=0,
     )
+
     structured_llm = llm.with_structured_output(MergeResponse)
 
     thread = list(messages)
     last_error = ""
+
     for attempt in range(1, max_retries + 2):
         try:
             response = structured_llm.invoke(_to_langchain_messages(thread, system_prompt))
-            if not isinstance(response, MergeResponse):
-                raise TypeError(
-                    f"Invalid email body extraction response type: {type(response)!r}"
-                )
+
             if attempt > 1:
                 logger.info(
                     "Structured email body extraction succeeded on attempt %d/%d",
                     attempt,
                     max_retries + 1,
                 )
-            return response
+
+            return MergeResponse.model_validate(response)
+
         except Exception as exc:
             last_error = str(exc)
+
             logger.warning(
                 "Structured email body extraction attempt %d/%d failed: %s",
                 attempt,
                 max_retries + 1,
                 exc,
             )
+
             if attempt <= max_retries:
-                continue
-                # thread = thread + [
-                #     {
-                #         "role": "user",
-                #         "content": (
-                #             "The previous structured extraction failed with this error:\n\n"
-                #             f"{last_error}\n\n"
-                #             "Fix only that issue and return data matching the "
-                #             "structured schema."
-                #         ),
-                #     }
-                # ]
+                thread = thread + [
+                    {
+                        "role": "user",
+                        "content": (
+                            "The previous structured extraction failed with this error:\n\n"
+                            f"{last_error}\n\n"
+                            "Fix only that issue and return data matching the "
+                            "structured schema."
+                        ),
+                    }
+                ]
 
     raise ExtractionError(
         message=(
-            f"Structured email body extraction failed after {max_retries + 1} attempts."
-            f" Last error: {last_error}"
+            f"Structured email body extraction failed after {max_retries + 1} attempts. "
+            f"Last error: {last_error}"
         ),
         raw_response="",
         attempts=max_retries + 1,
