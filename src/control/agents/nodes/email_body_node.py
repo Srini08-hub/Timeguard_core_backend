@@ -5,12 +5,11 @@ from uuid import UUID
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
 
-from src.config.settings import settings
 from src.control.agents.graph_config import get_db_session
+from src.control.agents.llm_key_rotation import invoke_groq_structured_with_key_rotation
 from src.control.agents.state import AttachmentState, TimeguardState
 from src.data.models.attachment import AttachmentStatus
 from src.data.models.email import EmailClassificationStatus, EmailStatus
@@ -146,14 +145,13 @@ CLASSIFICATION: [TIMESHEET / NOT_A_TIMESHEET]
 REASON: [one sentence]
 """
 
-    llm = ChatGroq(
-        # model_name="llama-3.3-70b-versatile",
+    response = invoke_groq_structured_with_key_rotation(
         model_name="llama-3.1-8b-instant",
-        temperature=0,
-        api_key=settings.GROQ_API_KEY_1,
+        output_schema=EmailBodyClassificationResponse,
+        messages=[HumanMessage(content=prompt)],
+        preferred_key_name="GROQ_API_KEY_1",
+        operation_name="Email body classification",
     )
-    structured_llm = llm.with_structured_output(EmailBodyClassificationResponse)
-    response = structured_llm.invoke([HumanMessage(content=prompt)])
 
     if not isinstance(response, EmailBodyClassificationResponse):
         raise ValueError("Invalid email body classification response type")

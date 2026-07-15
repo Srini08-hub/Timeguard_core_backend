@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.exceptions.custom_exception import (
     DatabaseException,
 )
+from src.data.models.assignments import Assignment, AssignmentStatus
 from src.data.models.department import Department
 
 
@@ -81,3 +82,17 @@ class DepartmentRepository:
             await self._db_session.flush()
         except SQLAlchemyError as err:
             raise DatabaseException("Failed to delete department") from err
+
+    async def get_by_assignment(self, emp_id: UUID, assignment_id: UUID) -> Department | None:
+        """Get department for a specific employee assignment."""
+        result = await self._db_session.execute(
+            select(Department)
+            .join(Assignment, Assignment.department_id == Department.department_id)
+            .where(
+                Assignment.emp_id == emp_id,
+                Assignment.assignment_id == assignment_id,
+                Assignment.status == AssignmentStatus.ACTIVE,
+                Department.is_active.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()

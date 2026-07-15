@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_groq import ChatGroq
 from llama_parse import LlamaParse
 
 from src.config.settings import settings
@@ -16,6 +15,7 @@ from src.control.agents.hybrid_pdf_extract_node.prompts import (
     build_extraction_messages,
     build_system_prompt,
 )
+from src.control.agents.llm_key_rotation import invoke_groq_structured_with_key_rotation
 from src.control.agents.state import AttachmentState, TimeguardState
 from src.control.agents.timesheet_schema import MergeResponse
 from src.core.exceptions.llm_exception import ExtractionError
@@ -52,18 +52,17 @@ def _extract_structured(
     messages: list[dict],
     max_retries: int = MAX_RETRIES,
 ) -> MergeResponse:
-    llm = ChatGroq(
-        model_name=MODEL_NAME,
-        api_key=settings.GROQ_API_KEY_2,
-        temperature=0,
-    )
-    structured_llm = llm.with_structured_output(MergeResponse)
-
     thread = list(messages)
     last_error = ""
     for attempt in range(1, max_retries + 2):
         try:
-            response = structured_llm.invoke(_to_langchain_messages(thread, system_prompt))
+            response = invoke_groq_structured_with_key_rotation(
+                model_name=MODEL_NAME,
+                output_schema=MergeResponse,
+                messages=_to_langchain_messages(thread, system_prompt),
+                preferred_key_name="GROQ_API_KEY_2",
+                operation_name="Structured hybrid PDF extraction",
+            )
             if not isinstance(response, MergeResponse):
                 raise TypeError(
                     f"Invalid hybrid PDF extraction response type: {type(response)!r}"

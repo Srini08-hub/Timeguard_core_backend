@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     GROQ_API_KEY_1: str
     GROQ_API_KEY_2: str
     GROQ_API_KEY_3: str
+    GROQ_API_KEY_4: str | None = None
+    GROQ_API_KEY_5: str | None = None
+    GROQ_API_KEY_6: str | None = None
     GOOGLE_API_KEY: str
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"

@@ -7,14 +7,13 @@ from typing import Any, cast
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_groq import ChatGroq
 
-from src.config.settings import settings
 from src.control.agents.extract_email_body_node.prompts import (
     build_extraction_messages,
     build_system_prompt,
 )
 from src.control.agents.graph_config import get_db_session
+from src.control.agents.llm_key_rotation import invoke_groq_structured_with_key_rotation
 from src.control.agents.state import TimeguardState
 from src.control.agents.timesheet_schema import MergeResponse
 from src.core.exceptions.llm_exception import ExtractionError
@@ -51,20 +50,18 @@ def _extract_structured(
     messages: list[dict],
     max_retries: int = MAX_RETRIES,
 ) -> MergeResponse:
-    llm = ChatGroq(
-        model_name=MODEL_NAME,
-        api_key=settings.GROQ_API_KEY_1,
-        temperature=0,
-    )
-
-    structured_llm = llm.with_structured_output(MergeResponse)
-
     thread = list(messages)
     last_error = ""
 
     for attempt in range(1, max_retries + 2):
         try:
-            response = structured_llm.invoke(_to_langchain_messages(thread, system_prompt))
+            response = invoke_groq_structured_with_key_rotation(
+                model_name=MODEL_NAME,
+                output_schema=MergeResponse,
+                messages=_to_langchain_messages(thread, system_prompt),
+                preferred_key_name="GROQ_API_KEY_1",
+                operation_name="Structured email body extraction",
+            )
 
             if attempt > 1:
                 logger.info(

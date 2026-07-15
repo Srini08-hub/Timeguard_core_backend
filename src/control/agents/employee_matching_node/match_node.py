@@ -22,6 +22,7 @@ from src.data.models.email import EmailStatus
 from src.data.models.employee import Employee
 from src.data.models.timesheet import TimesheetStatus
 from src.data.repositories.client_repository import ClientRepository
+from src.data.repositories.department_repository import DepartmentRepository
 from src.data.repositories.email_repository import EmailRepository
 from src.data.repositories.timesheet_repository import TimesheetRepository
 
@@ -179,6 +180,43 @@ async def _get_candidate_employees(
     return candidates
 
 
+async def _fuzzy_match_department(
+    extracted_department: str,
+    db_departments: list[Department],
+) -> Department | None:
+    """Fuzzy match extracted department name against database departments."""
+    if not extracted_department or not db_departments:
+        return None
+
+    best_department = None
+    best_score = 0.0
+    normalized_extracted = _normalize_name(extracted_department)
+
+    for db_dept in db_departments:
+        normalized_db_name = _normalize_name(db_dept.department_name)
+        score = get_client_matching_score(normalized_extracted, normalized_db_name)
+
+        if score >= MIN_MATCHING_SCORE and score > best_score:
+            best_score = score
+            best_department = db_dept
+
+    if best_department:
+        logger.info(
+            "Fuzzy matched department '%s' to DB department '%s' with score %.2f",
+            extracted_department,
+            best_department.department_name,
+            best_score,
+        )
+    else:
+        logger.warning(
+            "No fuzzy match found for department '%s' (best score: %.2f)",
+            extracted_department,
+            best_score,
+        )
+
+    return best_department
+
+
 def _build_similarity_matrix(
     extracted_names: list[str],
     candidate_names: list[str],
@@ -209,11 +247,15 @@ def _match_employees(
         return []
 
     enriched_records = [copy.deepcopy(record) for record in extracted_records]
+    for record in enriched_records:
+        record["extracted_employee_name"] = record.get("employee_name")
+
     if not candidates:
         for record in enriched_records:
             record["emp_id"] = None
             record["assignment_id"] = None
             record["matching_score"] = None
+            record["employee_matching_score"] = None
         return enriched_records
 
     similarity_matrix = _build_similarity_matrix(
@@ -262,13 +304,16 @@ def _match_employees(
             record["emp_id"] = None
             record["assignment_id"] = None
             record["matching_score"] = None
+            record["employee_matching_score"] = None
             continue
 
         candidate_index, score = match
         candidate = candidates[candidate_index]
+        matching_score = round(score, 2)
         record["emp_id"] = candidate["emp_id"]
         record["assignment_id"] = candidate["assignment_id"]
-        record["matching_score"] = round(score, 2)
+        record["matching_score"] = matching_score
+        record["employee_matching_score"] = matching_score
         record["employee_name"] = candidate["employee_name"]
 
     return enriched_records
@@ -303,8 +348,46 @@ async def employee_matching_node(
             raise ValueError("Client could not be resolved")
 
         db_session = get_db_session(config)
+
+        # Get all active departments for the client for fuzzy matching
+        department_repository = DepartmentRepository(db_session)
+        all_departments = await department_repository.get_by_client(client.client_id)
+
+        # Fuzzy match department for each extracted employee record before matching
+        employee_records = list(payload.get("employee_records") or [])
+        extracted_client_name = global_data.get("client_name")
+        extracted_global_department = global_data.get("department")
+        for record in employee_records:
+            extracted_department = record.get("department")
+            record["extracted_client_name"] = extracted_client_name
+            record["extracted_department_name"] = (
+                extracted_department or extracted_global_department
+            )
+
+            if extracted_department:
+                # Fuzzy match extracted department with all client departments
+                matched_department = await _fuzzy_match_department(
+                    extracted_department, all_departments
+                )
+
+                if matched_department:
+                    # Update department in record
+                    record["department"] = matched_department.department_name
+                    logger.info(
+                        "Fuzzy matched department '%s' to '%s' in extracted record",
+                        extracted_department,
+                        matched_department.department_name,
+                    )
+                else:
+                    logger.warning(
+                        "Could not fuzzy match department '%s'",
+                        extracted_department,
+                    )
+                    raise ValueError(
+                        f"Department '{extracted_department}' could not be matched"
+                    )
+
         # Get all candidates across all departments for the client
-        # Department-specific filtering will be done per-employee after matching
         candidates = await _get_candidate_employees(db_session, client)
 
         global_data = dict(payload.get("global_data") or {})
@@ -314,7 +397,7 @@ async def employee_matching_node(
         #     global_data["department"] = department.department_name
 
         enriched_records = _match_employees(
-            list(payload.get("employee_records") or []),
+            employee_records,
             candidates,
         )
 
