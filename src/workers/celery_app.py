@@ -15,13 +15,16 @@ from src.data.clients.postgress_client import dispose_async_engine, init_async_e
 celery_app = Celery(
     "core_backend",
     broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
 )
 
 celery_app.conf.update(
     accept_content=["json"],
     enable_utc=True,
-    result_serializer="json",
+    task_default_queue=settings.CELERY_TASK_QUEUE_NAME,
+    task_default_routing_key=settings.CELERY_TASK_QUEUE_NAME,
+    task_routes={
+        "classify_email": {"queue": settings.CELERY_TASK_QUEUE_NAME},
+    },
     task_serializer="json",
     timezone="UTC",
 )

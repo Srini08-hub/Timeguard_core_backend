@@ -3,13 +3,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import cast
-from urllib.parse import urlparse
 
 import fitz
 import pdfplumber
 
-from src.config.settings import settings
-from src.control.agents.state import AttachmentState, TimeguardState
+from src.control.agents.state import TimeguardState
+from src.utils.storage import resolve_attachment_to_local_path
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +20,6 @@ def classify_page(text: str, images: list, page_area: float) -> str:
     has_significant_image = any(
         (img["width"] * img["height"]) >= 0.30 * page_area for img in images
     )
-    # total_image_area = sum(
-    # img["width"] * img["height"]
-    # for img in images
-    # )
-
-    #  has_significant_image = total_image_area >= 0.30 * page_area
 
     if has_real_text and not has_significant_image:
         return "digitalpdfnode"
@@ -80,45 +73,16 @@ def classify_pdf(path: str | Path) -> str:
     return "hybrid_pdf"
 
 
-def _resolve_attachment_path(attachment: AttachmentState) -> Path:
-    attachment_url = attachment.get("attachment_url")
-    if attachment_url:
-        parsed_url = urlparse(attachment_url)
-        candidate = settings.ATTACHMENT_STORAGE_DIR / Path(parsed_url.path).name
-        if candidate.exists():
-            return candidate
-
-    # file_name = attachment.get("file_name")
-    # if file_name:
-    #     matches = list(settings.ATTACHMENT_STORAGE_DIR.glob(f"*_{file_name}"))
-    #     if matches:
-    #         return matches[0]
-
-    raise FileNotFoundError(
-        f"Unable to resolve a stored file for attachment {attachment.get('file_name', '')}"
-    )
-
-
-# def _current_attachment(state: TimeguardState) -> AttachmentState:
-#     attachments = state.get("attachments", [])
-#     index = state.get("current_attachment_index", 0)
-
-#     # if index >= len(attachments):
-#     #     raise ValueError("No attachment available for PDF classification")
-
-#     return attachments[index]
-
-
 def pdf_classifying_node(state: TimeguardState) -> TimeguardState:
-    # attachment = _current_attachment(state)
     index = state.get("current_attachment_index", 0)
     attachments = state.get("attachments", [])
-    pdf_path = _resolve_attachment_path(attachments[index])
+    pdf_path = resolve_attachment_to_local_path(attachments[index])
     classification = classify_pdf(pdf_path)
 
     attachments[index] = {
         **attachments[index],
         "doc_type": classification,
+        "file_path": pdf_path,
     }
     logger.info(
         "Classified attachment %s (%s) as %s",
@@ -127,7 +91,6 @@ def pdf_classifying_node(state: TimeguardState) -> TimeguardState:
         classification,
     )
 
-    # Set pdf_file_path in state for the integrated pdf classification flow
     result = cast(
         TimeguardState,
         {
@@ -137,7 +100,6 @@ def pdf_classifying_node(state: TimeguardState) -> TimeguardState:
         },
     )
 
-    # Also set scanned_pdf_file_path for scanned PDFs
     if classification == "scanned_pdf":
         result["scanned_pdf_file_path"] = str(pdf_path)
 
@@ -148,7 +110,6 @@ def route_pdf_classification(state: TimeguardState) -> str:
     index = state.get("current_attachment_index", 0)
     attachments = state.get("attachments", [])
     classification = attachments[index].get("doc_type")
-    # logger.info()
     if classification == "digital_pdf":
         return "pdf_node"
     if classification == "scanned_pdf":
@@ -157,7 +118,3 @@ def route_pdf_classification(state: TimeguardState) -> str:
         return "hybrid_pdf_node"
 
     return "increment_attachment_node"
-
-
-# Backwards-compatible alias for existing references.
-# pdf_node = pdf_classifying_node

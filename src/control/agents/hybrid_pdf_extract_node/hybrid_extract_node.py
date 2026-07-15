@@ -23,11 +23,12 @@ from src.data.models.email import EmailStatus
 from src.data.repositories.attachment_repository import AttachmentRepository
 from src.data.repositories.content_extract_repository import ContentExtractRepository
 from src.data.repositories.email_repository import EmailRepository
+from src.utils.storage import resolve_attachment_to_local_path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 1
+MAX_RETRIES = 2
 MODEL_NAME = "llama-3.3-70b-versatile"
 
 
@@ -83,18 +84,18 @@ def _extract_structured(
                 exc,
             )
             if attempt <= max_retries:
-                # continue
-                thread = thread + [
-                    {
-                        "role": "user",
-                        "content": (
-                            "The previous structured extraction failed with this error:\n\n"
-                            f"{last_error}\n\n"
-                            "Fix only that issue and return data matching the "
-                            "structured schema."
-                        ),
-                    }
-                ]
+                continue
+                # thread = thread + [
+                #     {
+                #         "role": "user",
+                #         "content": (
+                #             "The previous structured extraction failed with this error:\n\n"
+                #             f"{last_error}\n\n"
+                #             "Fix only that issue and return data matching the "
+                #             "structured schema."
+                #         ),
+                #     }
+                # ]
 
     raise ExtractionError(
         message=(
@@ -165,10 +166,10 @@ def _parse_pdf_to_markdown(pdf_path: Path) -> tuple[str, int]:
     return markdown_payload, len(documents)
 
 
-def _write_markdown_payload(markdown_payload: str, pdf_path: Path) -> Path:
-    markdown_path = pdf_path.with_suffix(".md")
-    markdown_path.write_text(markdown_payload, encoding="utf-8")
-    return markdown_path
+# def _write_markdown_payload(markdown_payload: str, pdf_path: Path) -> Path:
+#     markdown_path = pdf_path.with_suffix(".md")
+#     markdown_path.write_text(markdown_payload, encoding="utf-8")
+#     return markdown_path
 
 
 async def _store_content_extract_payload(
@@ -270,7 +271,7 @@ async def hybrid_pdf_extraction_node(
     """Parse hybrid PDF to markdown with LlamaParse, then extract structured data."""
     attachment = _current_attachment(state)
     # file_path = _resolve_attachment_path(attachment)
-    file_path = attachment.get("file_path")
+    file_path = resolve_attachment_to_local_path(attachment)
     if file_path is None:
         raise ValueError("Could not resolve attachment path for hybrid PDF extraction")
 
@@ -298,12 +299,11 @@ async def hybrid_pdf_extraction_node(
             system_prompt=system_prompt,
             messages=messages,
         )
-        parsed = response.model_dump()
-        # parsed = _apply_source_metadata(
-        #     response.model_dump(),
-        #     file_name=file_name,
-        #     content_type=content_type,
-        # )
+        parsed = _apply_source_metadata(
+            response.model_dump(),
+            file_name=file_name,
+            content_type=content_type,
+        )
     except ExtractionError as exc:
         logger.error(
             "Hybrid PDF extraction failed permanently for attachment %s: %s",

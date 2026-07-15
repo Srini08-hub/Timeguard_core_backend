@@ -1,6 +1,7 @@
 import fitz
 
 from src.control.agents.state import AttachmentState, TimeguardState
+from src.utils.storage import resolve_attachment_to_local_path
 
 
 def _current_attachment(state: TimeguardState) -> AttachmentState:
@@ -15,7 +16,7 @@ def _current_attachment(state: TimeguardState) -> AttachmentState:
 
 def scanned_pdf_node(state: TimeguardState) -> TimeguardState:
     attachment_state = _current_attachment(state)
-    scanned_pdf_path = attachment_state.get("file_path")
+    scanned_pdf_path = resolve_attachment_to_local_path(attachment_state)
     doc = fitz.open(scanned_pdf_path)
     try:
         total_pages = doc.page_count

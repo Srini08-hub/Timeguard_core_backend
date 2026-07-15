@@ -1,6 +1,7 @@
 import openpyxl
 
 from src.control.agents.state import AttachmentState, TimeguardState
+from src.utils.storage import resolve_attachment_to_local_path
 
 
 def _current_attachment(state: TimeguardState) -> AttachmentState:
@@ -19,7 +20,7 @@ def next_sheet(state: TimeguardState) -> TimeguardState:
     Extracts cell values row by row for that sheet only.
     """
     attachment_state = _current_attachment(state)
-    excel_path = attachment_state.get("file_path")
+    excel_path = resolve_attachment_to_local_path(attachment_state)
     queue = state["excel_sheet_queue"]
 
     if not queue:

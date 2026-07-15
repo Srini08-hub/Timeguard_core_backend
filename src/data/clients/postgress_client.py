@@ -12,8 +12,8 @@ def init_async_engine() -> AsyncEngine:
     if engine is None:
         engine = create_async_engine(
             database_uri,
-            pool_size=10,
-            max_overflow=10,
+            pool_size=2,
+            max_overflow=1,
             pool_timeout=10,
             pool_recycle=3600,
             pool_pre_ping=True,

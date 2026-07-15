@@ -1,0 +1,17 @@
+FROM python:3.13-slim
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+
+COPY pyproject.toml .
+
+RUN uv pip install --system --no-cache .
+
+COPY . .
+
+ENV PORT=8080
+
+EXPOSE 8080
+
+CMD ["sh", "-c", "echo STARTING_HTTP_SERVER; python -m http.server 8080 & echo STARTING_CELERY; exec celery -A src.workers.celery_app.celery_app worker -Q timeguard_queue --loglevel=info --concurrency=1"]

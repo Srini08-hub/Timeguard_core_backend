@@ -2,9 +2,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 from src.api.rest.routes.assignment_routes import router as assignment_router
+from src.api.rest.routes.attachment_routes import router as attachment_router
 from src.api.rest.routes.client_routes import router as client_router
 from src.api.rest.routes.client_rules_routes import router as client_rule_router
 from src.api.rest.routes.content_extract_rotues import router as content_extract_router
@@ -15,7 +15,6 @@ from src.api.rest.routes.health_routes import router as health_router
 from src.api.rest.routes.polling_routes import router as polling_router
 from src.api.rest.routes.timecard_routes import router as timecard_router
 from src.api.rest.routes.timesheet_routes import router as timesheet_router
-from src.config.settings import settings
 from src.core.exceptions import handlers as exception_handlers
 from src.core.services.gmail_polling_controller import gmail_polling_controller
 from src.data.clients import postgress_client
@@ -38,11 +37,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def get_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
     exception_handlers.register_exception_handlers(app)
-    app.mount(
-        "/attachments",
-        StaticFiles(directory=settings.ATTACHMENT_STORAGE_DIR),
-        name="attachments",
-    )
     app.include_router(client_router)
     app.include_router(email_router)
     app.include_router(employee_router)
@@ -52,6 +46,7 @@ def get_app() -> FastAPI:
     app.include_router(department_router)
     app.include_router(assignment_router)
     app.include_router(content_extract_router)
+    app.include_router(attachment_router)
     app.include_router(polling_router)
     app.include_router(health_router)
     return app

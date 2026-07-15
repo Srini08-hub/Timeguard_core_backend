@@ -1,7 +1,7 @@
 FROM python:3.13-slim
 
 # Install uv package manager
-RUN pip install uv
+RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
@@ -9,10 +9,10 @@ WORKDIR /app
 COPY pyproject.toml .
 
 # Install dependencies using uv
-RUN uv pip install --system -e .
+RUN uv pip install --system --no-cache .
 
 # for production
-# RUN uv pip install --system .
+# RUN uv pip install --system --no-cache .
 
 # Copy application code
 COPY . .

@@ -88,12 +88,14 @@ def _find_keyword_position(
     return False, 0.0, -1
 
 
-def _fuzzy_match_anchors(body: str) -> list[dict]:
+def _fuzzy_match_anchors(body: str, subject: str = "") -> list[dict]:
     hits = []
+    combined_text = f"{subject}\n{body}" if subject else body
+
     for keyword in ANCHOR_KEYWORDS:
         found, score, position = _find_keyword_position(
             keyword,
-            body,
+            combined_text,
             FUZZY_THRESHOLD,
         )
         if found:
@@ -124,16 +126,17 @@ def _harvest_context(body: str, hits: list[dict]) -> str:
     return "\n\n".join(chunks)
 
 
-def _classify_email_body(context_snippet: str) -> EmailBodyClassification:
+def _classify_email_body(context_snippet: str, subject: str = "") -> EmailBodyClassification:
+    subject_section = f"\nEMAIL SUBJECT:\n{subject}\n" if subject else ""
     prompt = f"""You are an email classifier.
 
-Based ONLY on the extracted email body snippets below, decide if the email is
+Based on the email subject and the extracted email body snippets below, decide if the email is
 about a TIMESHEET.
 
 A timesheet email usually mentions hours worked, pay period, dates or days of
 the week, clock in/out times, total hours, employee/client/project rows,
 approvals, or submitting/reviewing a timesheet.
-
+{subject_section}
 SNIPPETS:
 {context_snippet}
 
@@ -304,6 +307,7 @@ async def email_body_node(
 ) -> TimeguardState:
     body = state.get("body", "")
     body_text = body.strip()
+    subject = state.get("subject", "")
     attachments = list(state.get("attachments", []))
     classification = EmailBodyClassification.NOT_A_TIMESHEET
     anchor_hits: list[dict] = []
@@ -318,15 +322,15 @@ async def email_body_node(
                 "Email body is short (%d chars); classifying directly with LLM",
                 len(body_text),
             )
-            classification = _classify_email_body(body_text)
+            classification = _classify_email_body(body_text, subject)
             context_snippet = body_text
         else:
-            anchor_hits = _fuzzy_match_anchors(body)
+            anchor_hits = _fuzzy_match_anchors(body, subject)
             if not anchor_hits:
                 logger.info("No timesheet anchors found in email body")
             else:
                 context_snippet = _harvest_context(body, anchor_hits)
-                classification = _classify_email_body(context_snippet)
+                classification = _classify_email_body(context_snippet, subject)
         logger.info(f"classification result for email body: {classification}")
     except Exception as e:
         logger.exception("LLM classification failed for email body: %s", e)

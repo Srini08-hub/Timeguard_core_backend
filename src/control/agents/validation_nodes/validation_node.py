@@ -72,12 +72,60 @@ def _parse_time(value: Any) -> datetime | None:
     if _is_missing(value):
         return None
 
-    text = str(value).strip()
-    for fmt in ("%I:%M %p", "%I:%M%p", "%H:%M", "%H:%M:%S"):
+    text = str(value).strip().upper()
+
+    # Handle special cases first
+    # Single digit hours (8, 16) - assume 8:00 or 16:00
+    if text.isdigit() and len(text) <= 2:
+        hour = int(text)
+        if hour <= 23:
+            return datetime.strptime(f"{hour:02d}:00", "%H:%M")
+
+    # 4-digit military time (0830, 1630)
+    if text.isdigit() and len(text) == 4:
+        hour = int(text[:2])
+        minute = int(text[2:])
+        if hour <= 23 and minute <= 59:
+            return datetime.strptime(f"{hour:02d}:{minute:02d}", "%H:%M")
+
+    # Replace common separators with standard colon
+    normalized = text
+    normalized = normalized.replace(".", ":")  # 8.30 -> 8:30
+    normalized = normalized.replace("-", ":")  # 8-30 -> 8:30
+    normalized = normalized.replace(",", ":")  # 08,30 -> 08:30
+    normalized = normalized.replace("H", ":")  # 8H30 -> 8:30
+
+    # Handle AM/PM without colon (8 AM, 8AM, 08 AM, 08AM)
+    if "AM" in normalized or "PM" in normalized:
+        # Add space before AM/PM if missing (8AM -> 8 AM)
+        normalized = normalized.replace("AM", " AM").replace("PM", " PM")
+        # Handle single digit hour without colon (8 AM -> 8:00 AM)
+        if ":" not in normalized:
+            parts = normalized.split()
+            if len(parts) == 2:
+                time_part = parts[0]
+                meridiem = parts[1]
+                if time_part.isdigit():
+                    normalized = f"{time_part}:00 {meridiem}"
+
+    # Standard time formats
+    formats = [
+        "%I:%M %p",  # 8:00 AM
+        "%I:%M%p",  # 8:00AM
+        "%I %p",  # 8 AM
+        "%I%p",  # 8AM
+        "%H:%M",  # 08:00 (24-hour)
+        "%H:%M:%S",  # 08:00:00
+        "%H:%M %p",  # 08:00 AM (24-hour with meridiem)
+        "%H:%M%p",  # 08:00AM (24-hour with meridiem)
+    ]
+
+    for fmt in formats:
         try:
-            return datetime.strptime(text, fmt)
+            return datetime.strptime(normalized, fmt)
         except ValueError:
             continue
+
     return None
 
 

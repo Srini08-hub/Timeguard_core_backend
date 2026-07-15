@@ -2,6 +2,7 @@
 import pdfplumber
 
 from src.control.agents.state import AttachmentState, TimeguardState
+from src.utils.storage import resolve_attachment_to_local_path
 
 
 def _current_attachment(state: TimeguardState) -> AttachmentState:
@@ -16,7 +17,7 @@ def _current_attachment(state: TimeguardState) -> AttachmentState:
 
 def pdf_node(state: TimeguardState) -> TimeguardState:
     attachment_state = _current_attachment(state)
-    pdf_path = attachment_state.get("file_path")
+    pdf_path = resolve_attachment_to_local_path(attachment_state)
     with pdfplumber.open(pdf_path) as pdf:
         total_pages = len(pdf.pages)
         # [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

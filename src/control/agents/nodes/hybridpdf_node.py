@@ -13,6 +13,7 @@ from src.data.models.attachment import AttachmentStatus
 from src.data.models.email import EmailStatus
 from src.data.repositories.attachment_repository import AttachmentRepository
 from src.data.repositories.email_repository import EmailRepository
+from src.utils.storage import resolve_attachment_to_local_path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -128,7 +129,7 @@ async def hybrid_pdf_node(
     email_repository = EmailRepository(db_session)
 
     attachment_state = _current_attachment(state)
-    hybrid_pdf_path = attachment_state.get("file_path")
+    hybrid_pdf_path = resolve_attachment_to_local_path(attachment_state)
     # pdf_path = _resolve_attachment_path(attachment_state)
 
     logger.info(

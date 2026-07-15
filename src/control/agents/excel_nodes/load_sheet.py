@@ -1,6 +1,7 @@
 import openpyxl
 
 from src.control.agents.state import AttachmentState, TimeguardState
+from src.utils.storage import resolve_attachment_to_local_path
 
 
 def _current_attachment(state: TimeguardState) -> AttachmentState:
@@ -19,7 +20,7 @@ def excel_node(state: TimeguardState) -> TimeguardState:
     Just open the workbook to get sheet names, then close it.
     """
     attachment_state = _current_attachment(state)
-    excel_path = attachment_state.get("file_path")
+    excel_path = resolve_attachment_to_local_path(attachment_state)
     wb = openpyxl.load_workbook(
         excel_path,
         read_only=True,  # memory efficient

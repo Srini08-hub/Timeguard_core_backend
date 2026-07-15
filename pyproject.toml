@@ -25,6 +25,7 @@ dependencies = [
     "langchain-google-genai>=4.2.5",
     "langsmith>=0.8.16",
     "google-auth-oauthlib>=1.4.0",
+    "google-cloud-storage>=3.0.0",
     "llama-cloud>=1.6.0",
     "llama-parse>=0.5.20",
     "scipy>=1.15.3",

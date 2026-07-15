@@ -19,8 +19,12 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+    CELERY_TASK_QUEUE_NAME: str = "timeguard_queue"
     ATTACHMENT_STORAGE_DIR: Path = BASE_DIR / "attachments"
     ATTACHMENT_BASE_URL: str = "http://localhost:8002/attachments"
+    GCS_BUCKET_NAME: str | None = None
+    GCS_ATTACHMENT_PREFIX: str = "timeguard/attachments"
+    LOCAL_ATTACHMENT_TMP_DIR: Path = Path("/tmp/timeguard-attachments")
     LLAMA_CLOUD_API_KEY: str
     LANGSMITH_API_KEY: str
     LANGSMITH_TRACING: bool = False

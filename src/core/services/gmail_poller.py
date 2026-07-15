@@ -125,7 +125,12 @@ class GmailPoller:
             )
 
             for message_id in message_ids:
+                # classify_email.apply_async(
+                #     args=[message_id],
+                #     queue=settings.CELERY_TASK_QUEUE_NAME,
+                # )
                 classify_email.delay(message_id)
+                logger.info("hello")
 
             if mailbox_address is not None and newest_history_id is not None:
                 await repository.update_history_id(mailbox_address, str(newest_history_id))

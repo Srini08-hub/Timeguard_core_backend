@@ -12,6 +12,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 if TYPE_CHECKING:
     from src.control.agents.state import AttachmentState, TimeguardState
+from src.utils.storage import resolve_attachment_to_local_path
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("timesheet_extractor")
 
@@ -272,12 +274,12 @@ def excel_extraction_node(state: TimeguardState) -> dict:
     """Part A entry point: Phases 1-5 across the whole workbook."""
     attachement = _current_attachment(state)
     # file_path = _resolve_attachment_path(attachement)
-    file_path = attachement.get("file_path")
+    file_path = resolve_attachment_to_local_path(attachement)
     if file_path is None:
         raise ValueError("Could not resolve attachment path for Excel extraction")
     blocks = extract_workbook(str(file_path))
     # trace_path = _dump_blocks_for_trace(file_path, blocks)
-    logger.info("Probed workbook '%s': found %d sheet block(s).", file_path, len(blocks))
+    # logger.info("Probed workbook '%s': found %d sheet block(s).", file_path, len(blocks))
     # logger.info("Saved Excel extraction trace to %s", trace_path)
     return {"current_excel_block_index": 0, "blocks": blocks}
 
@@ -291,8 +293,8 @@ def extract_workbook(path: str) -> list[SerialisedBlock]:
     """
     # probes = probe_workbook(path, sheet_name=sheet_name)
     probes = probe_workbook(path)
-    # logger.info("Probed workbook '%s': found %d sheet(s).", path, len(probes))
-    # logger.info("Probed sheets: %s", ", ".join(probes.keys()))
+    logger.info("Probed workbook '%s': found %d sheet(s).", path, len(probes))
+    logger.info("Probed sheets: %s", ", ".join(probes.keys()))
 
     results: list[SerialisedBlock] = []
     for index, probe in enumerate(probes.values()):

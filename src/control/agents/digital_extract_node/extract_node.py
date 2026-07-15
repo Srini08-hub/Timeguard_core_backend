@@ -22,6 +22,8 @@ from src.control.agents.digital_extract_node.sort_elements import sort_elements
 
 if TYPE_CHECKING:
     from src.control.agents.state import AttachmentState, TimeguardState
+from src.utils.storage import resolve_attachment_to_local_path
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pdf_timesheet_extractor")
 
@@ -37,7 +39,7 @@ def extract_pdf(pdf_path: str) -> list[SerialisedPdfBlock]:
 
     c = serialise_all(all_pages_ordered)
     # write_markdown(c, Path(pdf_path).with_suffix(".md"))
-    # logger.info(c)
+    logger.info(c)
     return c
 
 
@@ -80,7 +82,7 @@ def digital_pdf_extraction_node(state: TimeguardState) -> dict:
     """Part A entry point: PyMuPDF+pdfplumber extraction -> one PDF markdown block."""
     attachment = _current_attachment(state)
     # file_path = _resolve_attachment_path(attachment)
-    file_path = attachment.get("file_path")
+    file_path = resolve_attachment_to_local_path(attachment)
     if file_path is None:
         raise ValueError("Could not resolve attachment path for PDF extraction")
     blocks = extract_pdf(str(file_path))

@@ -7,6 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from src.config.settings import settings
 from src.control.agents.state import AttachmentState, TimeguardState
 from src.data.models.attachment import AttachmentStatus
+from src.utils.storage import resolve_attachment_to_local_path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ async def scannedpdfnode(
     # attachment_repository = AttachmentRepository(db_session)
 
     attachment_state = _current_attachment(state)
-    pdf_path = _resolve_attachment_path(attachment_state)
+    pdf_path = resolve_attachment_to_local_path(attachment_state)
 
     logger.info(
         "Processing scanned PDF attachment %s from %s",
@@ -119,7 +120,7 @@ async def scannedpdfnode(
 
 #     def scannedpdfnode(state: TimeguardState) -> TimeguardState:
 #         attachment_state = _current_attachment(state)
-#         pdf_path = _resolve_attachment_path(attachment_state)
+#         pdf_path = resolve_attachment_to_local_path(attachment_state)
 
 #         logger.info(
 #             "Processing scanned PDF attachment %s from %s",
