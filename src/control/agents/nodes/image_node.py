@@ -89,8 +89,7 @@ Base the answer only on the image. If the image is unreadable or lacks enough
 timesheet evidence, classify it as not a timesheet """
 
     llm = ChatGoogleGenerativeAI(
-        # model="gemini-2.5-flash",
-        model="gemini-2.5-flash-lite",
+        model="gemini-3.1-flash-lite",
         temperature=0,
         api_key=settings.GOOGLE_API_KEY,
     )

@@ -44,6 +44,33 @@ def _to_decimal(value: Any) -> Decimal | None:
         return None
 
 
+def _duration_value_hours(value: Any) -> Decimal | None:
+    decimal_value = _to_decimal(value)
+    if decimal_value is not None:
+        return decimal_value
+    if _is_missing(value):
+        return None
+
+    text = str(value).strip()
+    parts = text.split(":")
+    if len(parts) not in {2, 3}:
+        return None
+
+    try:
+        hours = Decimal(parts[0].strip() or "0")
+        minutes = Decimal(parts[1].strip() or "0")
+        seconds = Decimal(parts[2].strip() or "0") if len(parts) == 3 else Decimal("0")
+    except (InvalidOperation, ValueError):
+        return None
+
+    if minutes < 0 or minutes >= 60 or seconds < 0 or seconds >= 60:
+        return None
+
+    return (hours + (minutes / Decimal("60")) + (seconds / Decimal("3600"))).quantize(
+        Decimal("0.01")
+    )
+
+
 def _uuid_or_none(value: Any) -> UUID | None:
     if _is_missing(value):
         return None
@@ -148,9 +175,9 @@ def _record_hours(record: dict[str, Any]) -> Decimal | None:
 
 
 def _record_break_hours(record: dict[str, Any], rule: ClientRule | None) -> Decimal:
-    payload_break = _to_decimal(record.get("break_hour"))
-    # if payload_break is None:
-    #     payload_break = _to_decimal(record.get("break_hours"))
+    payload_break = _duration_value_hours(record.get("break_hour"))
+    if payload_break is None:
+        payload_break = _duration_value_hours(record.get("break_hours"))
     if payload_break is not None:
         return payload_break
     if rule is not None and rule.break_auto_deduct and rule.break_deduction_hrs is not None:
@@ -158,14 +185,12 @@ def _record_break_hours(record: dict[str, Any], rule: ClientRule | None) -> Deci
     return Decimal("0")
 
 
-def _week_ending_from_payload(payload: dict[str, Any], fallback: date | None) -> date:
+def _week_ending_from_payload(payload: dict[str, Any], fallback: date | None) -> date | None:
     global_data = payload.get("global_data") or {}
     parsed = _parse_date(global_data.get("week_ending"))
     if parsed is not None:
         return parsed
-    if fallback is not None:
-        return fallback
-    raise ValueError("Week ending is missing from payload and no fallback was provided.")
+    return fallback
 
 
 def _exception_reason(
@@ -174,28 +199,109 @@ def _exception_reason(
     record: dict[str, Any] | None = None,
 ) -> str:
     prefix = employee_name or "Unknown employee"
-    date_label = ""
-    if record is not None and record.get("date"):
-        date_label = f" on {record['date']}"
+    record_data = record or {}
+    date_label = f" on {record_data['date']}" if record_data.get("date") else ""
 
     if exc_type == ExceptionType.MISSING_TIME_ENTRY:
+        missing_fields: list[str] = []
+        if _is_missing(record_data.get("check_in")):
+            missing_fields.append("check-in")
+        if _is_missing(record_data.get("check_out")):
+            missing_fields.append("check-out")
+        if not missing_fields:
+            missing_fields.append("time entry")
+        fields = " and ".join(missing_fields)
         return (
-            f"{prefix}{date_label} has a missing check-in, check-out, hours, "
-            "or total hours value."
+            f"{prefix}{date_label} is missing {fields}. "
+            "Add the missing time value or enter total hours."
         )
+
     if exc_type == ExceptionType.LOW_CONFIDENCE:
-        return f"{prefix}{date_label} has a confidence at or below 0.60."
+        confidence = record_data.get("confidence")
+        if not _is_missing(confidence):
+            return (
+                f"{prefix}{date_label} has low extraction confidence ({confidence}). "
+                "Review the extracted row before approval."
+            )
+        return (
+            f"{prefix}{date_label} has low extraction confidence. "
+            "Review the extracted row before approval."
+        )
+
+    if exc_type == ExceptionType.MISSING_CLIENT:
+        return (
+            "Client could not be matched from the extracted client name or sender "
+            "email. Select the correct client."
+        )
+
+    if exc_type == ExceptionType.MISSING_WEEK_ENDING:
+        return (
+            "Week ending is missing or could not be parsed from the timesheet. "
+            "Enter the correct week ending date."
+        )
+
+    if exc_type == ExceptionType.MISSING_DEPARTMENT:
+        return (
+            f"{prefix} has a missing or unmatched department. Select a department "
+            "assigned to the resolved client."
+        )
+
     if exc_type == ExceptionType.MISSING_EMPLOYEE_ID:
-        return f"{prefix} could not be matched to an employee ID."
+        return (
+            f"{prefix} could not be matched to an active employee. Correct the "
+            "employee name for the resolved client and department."
+        )
+
     if exc_type == ExceptionType.MISSING_ASSIGNMENT_ID:
-        return f"{prefix} could not be matched to an assignment ID."
+        return (
+            f"{prefix} matched an employee, but no assignment was found for the "
+            "resolved client and department. Assign the employee before approval."
+        )
+
     if exc_type == ExceptionType.TIME_ENTRY_CONFLICT:
-        return f"{prefix}{date_label} has  duration that does not match recorded hours."
+        if record_data:
+            recorded_hours = _to_decimal(record_data.get("hours"))
+            derived_hours = _duration_hours(
+                record_data.get("check_in"),
+                record_data.get("check_out"),
+            )
+            if recorded_hours is not None and derived_hours is not None:
+                return (
+                    f"{prefix}{date_label} has {recorded_hours} recorded hours, "
+                    f"but check-in/check-out calculate to {derived_hours} hours. "
+                    "Correct the time or hours."
+                )
+            return (
+                f"{prefix}{date_label} has conflicting check-in, check-out, or "
+                "hours values. Correct the time entry."
+            )
+        return (
+            f"{prefix}'s employee total hours do not match the sum of daily time "
+            "entries. Correct the total hours or daily rows."
+        )
+
     if exc_type == ExceptionType.HOURS_EXCEED_LIMIT:
-        return f"{prefix}{date_label} has a daily time entry above 15 hours."
+        record_hours = _record_hours(record_data)
+        if record_hours is not None:
+            return (
+                f"{prefix}{date_label} has {record_hours} hours, which exceeds "
+                f"the {DAILY_HOURS_LIMIT}-hour daily limit."
+            )
+        return f"{prefix}{date_label} exceeds the {DAILY_HOURS_LIMIT}-hour daily limit."
+
     if exc_type == ExceptionType.WEEKLY_HOURS_EXCEED_LIMIT:
-        return f"{prefix} has weekly hours above 75."
-    return f"{prefix} requires review."
+        return f"{prefix}'s weekly hours exceed the {WEEKLY_HOURS_LIMIT}-hour weekly limit."
+
+    if exc_type == ExceptionType.CALCULATION_DISCREPANCY:
+        return (
+            f"{prefix}{date_label} has a payroll calculation discrepancy. "
+            "Recalculate the timecard before approval."
+        )
+
+    return (
+        f"{prefix} has an unsupported validation exception: {exc_type.value}. "
+        "Review the timecard details."
+    )
 
 
 def _severity_rank(severity: ExceptionSeverity) -> int:
@@ -211,6 +317,20 @@ def _max_severity(severities: list[ExceptionSeverity]) -> ExceptionSeverity:
     if not severities:
         return ExceptionSeverity.NONE
     return max(severities, key=_severity_rank)
+
+
+def _matching_failures(
+    employee: dict[str, Any],
+    week_ending: date | None,
+) -> list[ValidationFailure]:
+    failures: list[ValidationFailure] = []
+    if week_ending is None:
+        failures.append((ExceptionType.MISSING_WEEK_ENDING, ExceptionSeverity.HIGH, {}))
+    if employee.get("client_match_failed"):
+        failures.append((ExceptionType.MISSING_CLIENT, ExceptionSeverity.HIGH, {}))
+    if employee.get("department_match_failed"):
+        failures.append((ExceptionType.MISSING_DEPARTMENT, ExceptionSeverity.HIGH, {}))
+    return failures
 
 
 def _validate_employee_record(employee: dict[str, Any]) -> list[ValidationFailure]:
@@ -403,11 +523,18 @@ async def validation_node(
         employee_records = list(payload.get("employee_records") or [])
         week_ending = _week_ending_from_payload(payload, timesheet.week_ending)
 
-        # await timecard_repository.delete_by_timesheet(timesheet.timesheet_id)
+        await timecard_repository.delete_by_timesheet(timesheet.timesheet_id)
 
         for employee in employee_records:
             employee_name = employee.get("employee_name")
-            failures = _validate_employee_record(employee)
+            matching_failures = _matching_failures(employee, week_ending)
+            blocks_employee_matching = any(
+                exc_type in {ExceptionType.MISSING_CLIENT, ExceptionType.MISSING_DEPARTMENT}
+                for exc_type, _, _ in matching_failures
+            )
+            failures = list(matching_failures)
+            if not blocks_employee_matching:
+                failures.extend(_validate_employee_record(employee))
             severities = [severity for _, severity, _ in failures]
             status = TimecardStatus.EXCEPTION if failures else TimecardStatus.NO_EXCEPTION
             severity = _max_severity(severities)

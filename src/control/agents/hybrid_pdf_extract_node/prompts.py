@@ -67,10 +67,10 @@ Strip markdown structural noise such as "## Page 1", table separator lines, repe
 - Normalize all output dates to YYYY-MM-DD.
 -if date is like this 05/07/26 then conside it as DD/MM/YY NOT MM/DD/YY
 - ** When parsing dates, try India format first: DD/MM/YYYY or DD/MM/YY. If that fails, try US format: MM/DD/YYYY or MM/DD/YY. Also handle ISO/textual dates when explicitly present.**
-- If no week ending is present in the source, set global_data.week_ending to null. Do not assume it.
-- Never output weekday names as dates. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
+- If no week ending is present in the source, set global_data.week_ending to null. Do not assume it, but still extract and preserve any row-level calendar dates that are explicitly present.
+- Never output weekday names as dates. If a row has an explicit calendar date, normalize that date to YYYY-MM-DD even when global_data.week_ending is null. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
 - Example: if week_ending = 2026-06-28, Monday -> 2026-06-22, Tuesday -> 2026-06-23, Wednesday -> 2026-06-24, Thursday -> 2026-06-25, Friday -> 2026-06-26, Saturday -> 2026-06-27, Sunday -> 2026-06-28.
-- If a row only has a weekday name and week_ending is unknown, set date to null.
+- If a row only has a weekday name and week_ending is unknown, set date to null; do not clear or ignore an explicit row-level date.
 - Always populate the day field. If the source explicitly provides a day name (e.g., Monday, Tue), use that full day name. If only a date is provided, calculate the day from the date (e.g., 2026-06-22 -> Monday). If neither date nor day is available, set day to null.
 
 ### HOURS ROUTING
@@ -81,7 +81,11 @@ Strip markdown structural noise such as "## Page 1", table separator lines, repe
 - If a source provides both a daily breakdown and a weekly total, keep the daily rows with hours and do not duplicate the weekly total into every daily row.
 
 ### TIME AND CONFIDENCE
-- Normalize check_in, check_out, and break_hour to HH:MM when possible.
+- Extract check_in, check_out, and break_hour from the source when present; do not invent missing values.
+- Normalize check_in and check_out to 24-hour HH:MM time format. Examples: 9 AM -> 09:00, 5:30 PM -> 17:30, 17:30 -> 17:30.
+- Normalize break_hour as a duration in HH:MM format, not as a decimal or bare number. Examples: 1 -> 01:00, 2 -> 02:00, 1.5 -> 01:30, 1.50 -> 01:30, 0.5 -> 00:30, 30 min -> 00:30.
+- If break_hour is already in HH:MM duration format, preserve it. If check_in, check_out, or break_hour is blank, missing, or unreadable, set it to null.
+- Never output decimal or bare numeric break_hour values such as "1", "1.5", "1.50", or "2".
 - Keep total_hours on the employee record and hours/overtime_hours as strings.
 - If confidence values are explicitly available, set each record's confidence to the minimum confidence across available fields in that record. Otherwise leave confidence null.
 

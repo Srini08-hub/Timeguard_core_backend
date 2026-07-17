@@ -22,9 +22,11 @@ class ExceptionSeverity(StrEnum):
 
 
 class ExceptionType(StrEnum):
-    EMPLOYEE_NOT_FOUND = "employee_not_found"
     MISSING_EMPLOYEE_ID = "missing_employee_id"
     MISSING_ASSIGNMENT_ID = "missing_assignment_id"
+    MISSING_CLIENT = "missing_client"
+    MISSING_WEEK_ENDING = "missing_week_ending"
+    MISSING_DEPARTMENT = "missing_department"
     HOURS_EXCEED_LIMIT = "hours_exceed_limit"
     WEEKLY_HOURS_EXCEED_LIMIT = "weekly_hours_exceed_limit"
     LOW_CONFIDENCE = "low_confidence"

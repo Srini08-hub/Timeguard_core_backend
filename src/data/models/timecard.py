@@ -83,9 +83,9 @@ class Timecard(Base):
         nullable=True,
     )
 
-    week_ending: Mapped[date] = mapped_column(
+    week_ending: Mapped[date | None] = mapped_column(
         Date,
-        nullable=False,
+        nullable=True,
     )
 
     employee_name: Mapped[str | None] = mapped_column(

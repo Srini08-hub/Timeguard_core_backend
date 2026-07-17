@@ -38,25 +38,25 @@ class EmployeeService:
         except Exception as exc:
             raise DatabaseException("Failed to create employee") from exc
 
-        return self._to_response(employee)
+        return await self._to_response(employee)
 
     async def get_inactive_employees(self) -> list[EmployeeResponse]:
         employees = await self._employee_repository.get_inactive_employees()
-        return [self._to_response(employee) for employee in employees]
+        return [await self._to_response(employee) for employee in employees]
 
     async def get_active_employees(self) -> list[EmployeeResponse]:
         employees = await self._employee_repository.get_active_employees()
-        return [self._to_response(employee) for employee in employees]
+        return [await self._to_response(employee) for employee in employees]
 
     async def get_unassigned_employees(self) -> list[EmployeeResponse]:
         employees = await self._employee_repository.get_unassigned_employees()
-        return [self._to_response(employee) for employee in employees]
+        return [await self._to_response(employee) for employee in employees]
 
     async def get_employee_by_id(self, emp_id: UUID) -> EmployeeResponse:
         employee = await self._employee_repository.get_by_id(emp_id)
         if employee is None:
             raise ResourceNotFound("Employee not found")
-        return self._to_response(employee)
+        return await self._to_response(employee)
 
     async def update_employee(
         self,
@@ -75,7 +75,7 @@ class EmployeeService:
         except Exception as exc:
             raise DatabaseException("Failed to update employee") from exc
 
-        return self._to_response(updated_employee)
+        return await self._to_response(updated_employee)
 
     async def soft_delete_employee(self, emp_id: UUID) -> EmployeeResponse:
         employee = await self._employee_repository.get_by_id(emp_id)
@@ -96,14 +96,22 @@ class EmployeeService:
         except Exception as exc:
             raise DatabaseException("Failed to delete employee") from exc
 
-        return self._to_response(deleted_employee)
+        return await self._to_response(deleted_employee)
 
-    def _to_response(self, employee: Employee) -> EmployeeResponse:
+    async def _to_response(self, employee: Employee) -> EmployeeResponse:
+        assignment = None
+        if employee.is_assigned:
+            assignment = await self._assignment_repository.get_active_by_employee(
+                employee.emp_id
+            )
+
         return EmployeeResponse(
             emp_id=employee.emp_id,
             email=employee.email,
             name=employee.name,
             is_active=employee.is_active,
             is_assigned=employee.is_assigned,
+            client_id=assignment.client_id if assignment is not None else None,
+            department_id=assignment.department_id if assignment is not None else None,
             created_at=employee.created_at,
         )

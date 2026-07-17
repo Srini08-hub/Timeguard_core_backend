@@ -42,8 +42,9 @@ async def _classify_email_async(gmail_message_id: str) -> dict:
             raise
 
     return {
-        "email_id": result["email_id"],
+        "email_id": result.get("email_id") if isinstance(result, dict) else None,
         "gmail_message_id": gmail_message_id,
+        "interrupted": isinstance(result, dict) and "__interrupt__" in result,
     }
 
 
