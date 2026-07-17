@@ -48,6 +48,14 @@ Identify:
 If only one employee exists with no clear global/employee distinction, use judgment: sheet-wide fields -> global_data, person-specific fields -> employee_records.
 Strip coordinate and layout noise ("R5:", "A5:", merged-cell descriptors, sheet headers) - these are formatting artifacts, never extraction targets.
 
+### REPEATED EMPLOYEE ROWS
+- Never drop a physical row only because the employee name appeared earlier in the sheet.
+- If the same employee appears on multiple rows, even non-adjacent rows, merge those rows into one employee record and preserve every nonblank daily/date cell from every occurrence.
+- Treat repeated rows as continuation segments for that employee. Blank date cells mean no record for that date on that row; they do not mean the whole repeated row is a duplicate.
+- If one occurrence has Monday-Wednesday hours and a later occurrence has Thursday-Friday hours, output one employee record containing all five daily records.
+- If a later repeated row contains Total Hours for the combined week, keep that value as the employee-level total_hours.
+- Output at most one employee record per unique employee name within the same worksheet unless the source clearly identifies different people with the same name.
+
 ### NORMALIZATION RULES
 - Global aliases: client_name = Client, Client Name, Customer, Company, Organization, Vendor, Employer. week_ending = Week Ending, Week End, WeekEnding, Week_End, Week Ending Date, Period Ending, Pay Period End, Ending Date.
 - Employee aliases: employee_name = Employee, Employee Name, Name. department = Department, Dept, Division, Business Unit, BU, Section.
@@ -59,10 +67,11 @@ Strip coordinate and layout noise ("R5:", "A5:", merged-cell descriptors, sheet 
 
 - When parsing dates, try India format first: DD/MM/YYYY or DD/MM/YY. If that fails, try US format: MM/DD/YYYY or MM/DD/YY. Also handle ISO/textual dates when explicitly present.
 - Normalize all output dates to YYYY-MM-DD.
-- If no week ending is present in the source, set global_data.week_ending to null. Do not assume it.
-- Never output weekday names as dates. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
+- For date-only Excel headers like 05-Oct, infer the year from the sheet week-ending/year context when present, then calculate day from that normalized calendar date. Do not assign weekday names by column position.
+- If no week ending is present in the source, set global_data.week_ending to null. Do not assume it, but still extract and preserve any row-level calendar dates that are explicitly present.
+- Never output weekday names as dates. If a row has an explicit calendar date, normalize that date to YYYY-MM-DD even when global_data.week_ending is null. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
 - Example: if week_ending = 2026-06-28, Monday -> 2026-06-22, Tuesday -> 2026-06-23, Wednesday -> 2026-06-24, Thursday -> 2026-06-25, Friday -> 2026-06-26, Saturday -> 2026-06-27, Sunday -> 2026-06-28.
-- If a row only has a weekday name and week_ending is unknown, set date to null.
+- If a row only has a weekday name and week_ending is unknown, set date to null; do not clear or ignore an explicit row-level date.
 - Always populate the day field. If the source explicitly provides a day name (e.g., Monday, Tue), use that full day name. If only a date is provided, calculate the day from the date (e.g., 2026-06-22 -> Monday). If neither date nor day is available, set day to null.
 
 ### HOURS ROUTING
@@ -73,7 +82,11 @@ Strip coordinate and layout noise ("R5:", "A5:", merged-cell descriptors, sheet 
 - If a source provides both a daily breakdown and a weekly total, keep the daily rows with hours and do not duplicate the weekly total into every daily row.
 
 ### TIME AND CONFIDENCE
-- Normalize check_in, check_out, and break_hour to HH:MM when possible.
+- Extract check_in, check_out, and break_hour from the source when present; do not invent missing values.
+- Normalize check_in and check_out to 24-hour HH:MM time format. Examples: 9 AM -> 09:00, 5:30 PM -> 17:30, 17:30 -> 17:30.
+- Normalize break_hour as a duration in HH:MM format, not as a decimal or bare number. Examples: 1 -> 01:00, 2 -> 02:00, 1.5 -> 01:30, 1.50 -> 01:30, 0.5 -> 00:30, 30 min -> 00:30.
+- If break_hour is already in HH:MM duration format, preserve it. If check_in, check_out, or break_hour is blank, missing, or unreadable, set it to null.
+- Never output decimal or bare numeric break_hour values such as "1", "1.5", "1.50", or "2".
 - Keep total_hours on the employee record and hours/overtime_hours as strings.
 - If confidence values are explicitly available, set each record's confidence to the minimum confidence across available fields in that record. Otherwise leave confidence null.
 
@@ -91,6 +104,12 @@ Input:
   R6: A6: Mon | B6: 8
   R7: A7: Tue | B7: 8
 
+Repeated employee row example:
+Input rows:
+  Employee Name | 2026-11-09 | 2026-11-10 | 2026-11-11 | 2026-11-12 | 2026-11-13 | Total Hours
+  Owen King     | 8          | 8.5        | 8          |            |            |
+  Owen King     |            |            |            | 8          | 8.5        | 41
+Expected behavior: output one employee_record for Owen King with five timesheet_records, preserving 8, 8.5, 8, 8, and 8.5, and set total_hours to "41".
 
 ### TASK
 # Return structured data matching the canonical schema:

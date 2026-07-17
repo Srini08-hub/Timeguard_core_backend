@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -83,11 +83,11 @@ class TimecardRepository:
         except SQLAlchemyError as e:
             raise DatabaseException(f"Failed to get client rule for timecard: {str(e)}") from e
 
-    # async def delete_by_timesheet(self, timesheet_id: UUID) -> None:
-    #     await self._session.execute(
-    #         delete(Timecard).where(Timecard.timesheet_id == timesheet_id)
-    #     )
-    #     await self._session.flush()
+    async def delete_by_timesheet(self, timesheet_id: UUID) -> None:
+        await self._session.execute(
+            delete(Timecard).where(Timecard.timesheet_id == timesheet_id)
+        )
+        await self._session.flush()
 
     async def create_generated_timecard(
         self,
@@ -96,7 +96,7 @@ class TimecardRepository:
         emp_id: UUID | None,
         assignment_id: UUID | None,
         rule_id: UUID | None,
-        week_ending: date,
+        week_ending: date | None,
         employee_name: str | None,
         reg_hours: Decimal | None,
         ot_hours: Decimal | None,
@@ -168,6 +168,7 @@ class TimecardRepository:
         timecard: Timecard,
         *,
         employee_name: str | None = None,
+        week_ending: date | None = None,
         reg_hours: Decimal | None = None,
         ot_hours: Decimal | None = None,
         dt_hours: Decimal | None = None,
@@ -177,6 +178,8 @@ class TimecardRepository:
         try:
             if employee_name is not None:
                 timecard.employee_name = employee_name
+            if week_ending is not None:
+                timecard.week_ending = week_ending
             if reg_hours is not None:
                 timecard.reg_hours = reg_hours
             if ot_hours is not None:

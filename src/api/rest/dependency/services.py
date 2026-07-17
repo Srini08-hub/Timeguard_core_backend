@@ -38,7 +38,12 @@ async def get_timesheet_service(
 async def get_timecard_service(
     db: AsyncSession = Depends(get_async_db),
 ) -> TimecardService:
-    return TimecardService(TimecardRepository(db), ExceptionRepository(db))
+    return TimecardService(
+        TimecardRepository(db),
+        ExceptionRepository(db),
+        TimesheetRepository(db),
+        EmailRepository(db),
+    )
 
 
 async def get_client_service(

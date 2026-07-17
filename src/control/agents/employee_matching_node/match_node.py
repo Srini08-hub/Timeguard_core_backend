@@ -4,6 +4,7 @@ import copy
 import logging
 import re
 import unicodedata
+from datetime import date, datetime
 from email.utils import parseaddr
 from typing import Any, cast
 
@@ -32,6 +33,26 @@ logger = logging.getLogger(__name__)
 
 MIN_MATCHING_SCORE = 85.0
 NON_MATCH_COST = 1_000_000.0
+DATE_FORMATS = ("%Y-%m-%d", "%d-%b-%Y", "%d/%m/%y", "%d/%m/%Y")
+
+
+def _is_missing(value: Any) -> bool:
+    return value is None or str(value).strip() == ""
+
+
+def _parse_week_ending(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    if _is_missing(value):
+        return None
+
+    text = str(value).strip()
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def _normalize_name(value: str | None) -> str:
@@ -248,7 +269,9 @@ def _match_employees(
 
     enriched_records = [copy.deepcopy(record) for record in extracted_records]
     for record in enriched_records:
-        record["extracted_employee_name"] = record.get("employee_name")
+        record["extracted_employee_name"] = record.get(
+            "extracted_employee_name"
+        ) or record.get("employee_name")
 
     if not candidates:
         for record in enriched_records:
@@ -295,7 +318,7 @@ def _match_employees(
         strict=True,
     ):
         score = similarity_matrix[row_index][col_index]
-        if score >= MIN_MATCHING_SCORE:
+        if score >= MIN_MATCHING_SCORE and cost_matrix[row_index][col_index] < NON_MATCH_COST:
             assigned_rows[row_index] = (col_index, score)
 
     for row_index, record in enumerate(enriched_records):
@@ -329,13 +352,8 @@ async def employee_matching_node(
         return state
 
     try:
-        # Validate week_ending is present
         global_data = payload.get("global_data") or {}
-        week_ending = global_data.get("week_ending")
-        if not week_ending:
-            raise ValueError("week_ending is not available in payload")
-
-        client, department = await _resolve_client_and_department(state, config)
+        client, _department = await _resolve_client_and_department(state, config)
 
         # Check if client_name was provided but no match found
         # client_name_from_result = (global_data.get("client_name") or "").strip()
@@ -343,49 +361,110 @@ async def employee_matching_node(
         #     raise ValueError(f"Client name '{client_name_from_result}' does not match
         # any client in the database")
 
-        if client is None:
-            logger.warning("Skipping employee matching because client could not be resolved")
-            raise ValueError("Client could not be resolved")
-
         db_session = get_db_session(config)
+
+        if client is None:
+            logger.warning(
+                "Continuing with exception rows because client could not be resolved"
+            )
+            global_data = dict(payload.get("global_data") or {})
+            employee_records = [
+                dict(record)
+                for record in payload.get("employee_records") or []
+                if isinstance(record, dict)
+            ]
+            extracted_client_name = global_data.get("client_name")
+            extracted_global_department = global_data.get("department")
+            for record in employee_records:
+                record["extracted_employee_name"] = record.get(
+                    "extracted_employee_name"
+                ) or record.get("employee_name")
+                record["extracted_client_name"] = extracted_client_name
+                extracted_department = record.get("department") or extracted_global_department
+                record["extracted_department_name"] = (
+                    record.get("extracted_department_name") or extracted_department
+                )
+                record["client_match_failed"] = True
+                if _is_missing(extracted_department):
+                    record["department_match_failed"] = True
+                record["emp_id"] = None
+                record["assignment_id"] = None
+                record["matching_score"] = None
+                record["employee_matching_score"] = None
+
+            updated_payload = {
+                **payload,
+                "global_data": global_data,
+                "employee_records": employee_records,
+            }
+            email_id = state.get("email_id")
+            if email_id:
+                timesheet_repository = TimesheetRepository(db_session)
+                timesheet = await timesheet_repository.update_timesheet(
+                    email_id=email_id,
+                    client_name=str(extracted_client_name).strip()
+                    if not _is_missing(extracted_client_name)
+                    else None,
+                    payload=updated_payload,
+                    status=TimesheetStatus.UNDER_REVIEW,
+                )
+                if timesheet is None:
+                    timesheet = await timesheet_repository.create_with_merge_data(
+                        email_id=email_id,
+                        client_name=str(extracted_client_name).strip()
+                        if not _is_missing(extracted_client_name)
+                        else None,
+                        payload=updated_payload,
+                    )
+                    timesheet.status = TimesheetStatus.UNDER_REVIEW
+            await db_session.commit()
+            return cast(TimeguardState, {**state, "payload": updated_payload})
 
         # Get all active departments for the client for fuzzy matching
         department_repository = DepartmentRepository(db_session)
         all_departments = await department_repository.get_by_client(client.client_id)
 
         # Fuzzy match department for each extracted employee record before matching
-        employee_records = list(payload.get("employee_records") or [])
+        employee_records = [
+            dict(record)
+            for record in payload.get("employee_records") or []
+            if isinstance(record, dict)
+        ]
         extracted_client_name = global_data.get("client_name")
         extracted_global_department = global_data.get("department")
         for record in employee_records:
-            extracted_department = record.get("department")
+            extracted_department = record.get("department") or extracted_global_department
             record["extracted_client_name"] = extracted_client_name
             record["extracted_department_name"] = (
-                extracted_department or extracted_global_department
+                record.get("extracted_department_name") or extracted_department
             )
 
-            if extracted_department:
-                # Fuzzy match extracted department with all client departments
-                matched_department = await _fuzzy_match_department(
-                    extracted_department, all_departments
-                )
+            if _is_missing(extracted_department):
+                record["department"] = None
+                record["department_match_failed"] = True
+                continue
 
-                if matched_department:
-                    # Update department in record
-                    record["department"] = matched_department.department_name
-                    logger.info(
-                        "Fuzzy matched department '%s' to '%s' in extracted record",
-                        extracted_department,
-                        matched_department.department_name,
-                    )
-                else:
-                    logger.warning(
-                        "Could not fuzzy match department '%s'",
-                        extracted_department,
-                    )
-                    raise ValueError(
-                        f"Department '{extracted_department}' could not be matched"
-                    )
+            # Fuzzy match extracted department with all client departments
+            matched_department = await _fuzzy_match_department(
+                str(extracted_department), all_departments
+            )
+
+            if matched_department:
+                # Update department in record
+                record["department"] = matched_department.department_name
+                record.pop("department_match_failed", None)
+                logger.info(
+                    "Fuzzy matched department '%s' to '%s' in extracted record",
+                    extracted_department,
+                    matched_department.department_name,
+                )
+            else:
+                logger.warning(
+                    "Could not fuzzy match department '%s'",
+                    extracted_department,
+                )
+                record["department"] = None
+                record["department_match_failed"] = True
 
         # Get all candidates across all departments for the client
         candidates = await _get_candidate_employees(db_session, client)
@@ -400,6 +479,12 @@ async def employee_matching_node(
             employee_records,
             candidates,
         )
+        for record in enriched_records:
+            if record.get("department_match_failed"):
+                record["emp_id"] = None
+                record["assignment_id"] = None
+                record["matching_score"] = None
+                record["employee_matching_score"] = None
 
         # Calculate hours from check_in/check_out if hours is not provided
         # enriched_records = _calculate_hours_from_check_in_out(enriched_records)
@@ -432,7 +517,6 @@ async def employee_matching_node(
         # )
         # logger.info("Stored employee matching result for testing at %s", trace_path)
 
-        await db_session.commit()
         logger.info("Employee matching completed successfully")
         return cast(
             TimeguardState,

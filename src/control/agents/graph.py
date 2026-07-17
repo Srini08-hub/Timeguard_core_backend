@@ -46,6 +46,7 @@ from src.control.agents.hybrid_pdf_extract_node.hybrid_extract_node import (
     hybrid_pdf_extraction_node,
 )
 from src.control.agents.image_extract_node.extract_node import image_extraction_node
+from src.control.agents.matching_prerequisite_node import matching_prerequisite_node
 from src.control.agents.merge_node.merge_node import merge_node
 from src.control.agents.nodes.classify_node import classify_attachments_router
 
@@ -311,8 +312,10 @@ async def build_email_graph() -> CompiledStateGraph[TimeguardState]:
     graph.add_edge("image_extraction_node", "increment_extraction_node")
 
     graph.add_edge("email_body_extraction_node", "merge_node")
+    graph.add_node("matching_prerequisite_node", matching_prerequisite_node)
+    graph.add_edge("merge_node", "matching_prerequisite_node")
     graph.add_node("employee_matching_node", employee_matching_node)
-    graph.add_edge("merge_node", "employee_matching_node")
+    graph.add_edge("matching_prerequisite_node", "employee_matching_node")
     graph.add_node("validation_node", validation_node)
     graph.add_edge("employee_matching_node", "validation_node")
     graph.add_edge("validation_node", END)

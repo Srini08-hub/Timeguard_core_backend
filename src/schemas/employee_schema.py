@@ -21,4 +21,6 @@ class EmployeeResponse(BaseModel):
     name: str
     is_active: bool
     is_assigned: bool
+    client_id: UUID | None = None
+    department_id: UUID | None = None
     created_at: datetime

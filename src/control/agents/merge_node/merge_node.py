@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Iterator
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 
@@ -37,6 +37,7 @@ DATE_FORMATS = [
     "%d/%m/%y",
     "%d/%m/%Y",
 ]
+PARTIAL_DATE_FORMATS = ["%d-%b", "%d-%B", "%b-%d", "%B-%d"]
 
 
 def _is_missing(value: Any) -> bool:
@@ -50,6 +51,49 @@ def _to_decimal(value: Any) -> Decimal | None:
         return Decimal(str(value).strip())
     except Exception:
         return None
+
+
+def _nearest_year_date(month: int, day: int, reference_date: date) -> date | None:
+    candidates: list[date] = []
+    for year in (reference_date.year - 1, reference_date.year, reference_date.year + 1):
+        try:
+            candidates.append(date(year, month, day))
+        except ValueError:
+            continue
+    if not candidates:
+        return None
+    return min(candidates, key=lambda candidate: abs(candidate - reference_date))
+
+
+def _parse_date_value(value: Any, reference_date: date | None = None) -> date | None:
+    if _is_missing(value):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        pass
+
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+
+    if reference_date is not None:
+        for fmt in PARTIAL_DATE_FORMATS:
+            try:
+                parsed = datetime.strptime(text, fmt).date()
+            except ValueError:
+                continue
+            return _nearest_year_date(parsed.month, parsed.day, reference_date)
+
+    return None
 
 
 def _parse_time(value: Any) -> datetime | None:
@@ -132,9 +176,9 @@ _WEEKDAY_OFFSETS = {
 
 def _normalize_weekday_dates(
     records: list[dict[str, Any]],
-    week_ending: Any,
+    week_ending: date | None,
 ) -> list[dict[str, Any]]:
-    """Convert weekday date labels to YYYY-MM-DD using week ending as Sunday."""
+    """Normalize date/day pairs, using week ending only when date is absent."""
     for employee_record in records:
         timesheet_records = employee_record.get("timesheet_records") or []
         if not isinstance(timesheet_records, list):
@@ -143,16 +187,29 @@ def _normalize_weekday_dates(
         for timesheet_record in timesheet_records:
             if not isinstance(timesheet_record, dict):
                 continue
+
+            parsed_date = _parse_date_value(timesheet_record.get("date"), week_ending)
+            if parsed_date is not None:
+                timesheet_record["date"] = str(parsed_date)
+                timesheet_record["day"] = parsed_date.strftime("%A")
+                continue
+
             day_value = timesheet_record.get("day")
             if not isinstance(day_value, str):
+                timesheet_record["date"] = None
                 continue
+
             weekday_offset = _WEEKDAY_OFFSETS.get(day_value.strip().lower())
             if weekday_offset is None:
+                timesheet_record["date"] = None
                 continue
+
             if week_ending is None:
                 timesheet_record["date"] = None
             else:
-                timesheet_record["date"] = str(week_ending + timedelta(days=weekday_offset))
+                calculated_date = week_ending + timedelta(days=weekday_offset)
+                timesheet_record["date"] = str(calculated_date)
+                timesheet_record["day"] = calculated_date.strftime("%A")
 
     return records
 
@@ -219,7 +276,115 @@ def _first_present(current: Any, incoming: Any) -> Any:
 
 
 def _employee_key(employee_name: Any) -> str:
-    return " ".join(str(employee_name or "").lower().split())
+    normalized = str(employee_name or "").translate(
+        dict.fromkeys(map(ord, "\u200b\u200c\u200d\ufeff"), None)
+    )
+    return " ".join(normalized.lower().split())
+
+
+def _format_decimal(value: Decimal) -> str:
+    if value == value.to_integral_value():
+        return str(value.quantize(Decimal("1")))
+    return format(value.normalize(), "f")
+
+
+def _best_total_hours(current: Any, incoming: Any) -> Any:
+    if _is_missing(current):
+        return incoming if not _is_missing(incoming) else current
+    if _is_missing(incoming):
+        return current
+
+    current_decimal = _to_decimal(current)
+    incoming_decimal = _to_decimal(incoming)
+    if current_decimal is None or incoming_decimal is None:
+        return current
+    return _format_decimal(max(current_decimal, incoming_decimal))
+
+
+def _timesheet_record_key(record: dict[str, Any]) -> tuple[str, str] | None:
+    date_value = record.get("date")
+    if not _is_missing(date_value):
+        return ("date", str(date_value).strip().lower())
+
+    day_value = record.get("day")
+    if not _is_missing(day_value):
+        return ("day", str(day_value).strip().lower())
+
+    return None
+
+
+def _merge_timesheet_record(
+    existing: dict[str, Any],
+    incoming: dict[str, Any],
+) -> dict[str, Any]:
+    for field, incoming_value in incoming.items():
+        existing_value = existing.get(field)
+        if _is_missing(existing_value) and not _is_missing(incoming_value):
+            existing[field] = incoming_value
+            continue
+
+        if field == "confidence" and incoming_value is not None:
+            try:
+                existing[field] = max(float(existing_value or 0), float(incoming_value))
+            except (TypeError, ValueError):
+                pass
+
+    return existing
+
+
+def _compact_timesheet_records(records: list[Any]) -> list[dict[str, Any]]:
+    compacted: list[dict[str, Any]] = []
+    records_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+
+        key = _timesheet_record_key(record)
+        if key is None:
+            compacted.append(record)
+            continue
+
+        if key in records_by_key:
+            _merge_timesheet_record(records_by_key[key], record)
+            continue
+
+        record_copy = dict(record)
+        records_by_key[key] = record_copy
+        compacted.append(record_copy)
+
+    return compacted
+
+
+def _sum_timesheet_record_hours(records: list[dict[str, Any]]) -> Decimal | None:
+    total = Decimal("0")
+    has_hours = False
+
+    for record in records:
+        hours = _to_decimal(record.get("hours"))
+        if hours is None:
+            continue
+        total += hours
+        has_hours = True
+
+    return total if has_hours else None
+
+
+def _finalize_employee_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for employee_record in records:
+        timesheet_records = _compact_timesheet_records(
+            employee_record.get("timesheet_records") or []
+        )
+        employee_record["timesheet_records"] = timesheet_records
+
+        daily_total = _sum_timesheet_record_hours(timesheet_records)
+        existing_total = _to_decimal(employee_record.get("total_hours"))
+        if daily_total is not None and (
+            existing_total is None or daily_total > existing_total
+        ):
+            employee_record["total_hours"] = _format_decimal(daily_total)
+
+    return records
 
 
 def _merge_source_lists(
@@ -296,7 +461,7 @@ def _combine_merge_payloads(extracted_payloads: list[dict[str, Any]]) -> dict[st
                 existing.get("department"),
                 employee_record.get("department"),
             )
-            existing["total_hours"] = _first_present(
+            existing["total_hours"] = _best_total_hours(
                 existing.get("total_hours"),
                 employee_record.get("total_hours"),
             )
@@ -316,7 +481,7 @@ def _combine_merge_payloads(extracted_payloads: list[dict[str, Any]]) -> dict[st
             if _is_missing(employee_record.get("department")):
                 employee_record["department"] = global_department
 
-    combined["employee_records"] = list(employees_by_key.values())
+    combined["employee_records"] = _finalize_employee_records(list(employees_by_key.values()))
     return MergeResponse.model_validate(combined).model_dump()
 
 
@@ -374,8 +539,6 @@ async def merge_node(
         global_data = payload.get("global_data", {})
         client_name = global_data.get("client_name")
         week_ending_str = global_data.get("week_ending")
-        if week_ending_str is None:
-            raise ValueError("week_ending is not available in payload")
         week_ending = None
 
         if week_ending_str:
@@ -386,18 +549,20 @@ async def merge_node(
                 except ValueError:
                     continue
 
-        if week_ending is None:
+        if week_ending_str and week_ending is None:
             logger.warning(
                 "Failed to parse week_ending '%s' for email %s",
                 week_ending_str,
                 email_id,
             )
-            raise ValueError("week_ending is not available in payload")
         payload["employee_records"] = _normalize_weekday_dates(
             payload.get("employee_records", []),
             week_ending,
         )
         payload["employee_records"] = _calculate_hours_from_check_in_out(
+            payload.get("employee_records", [])
+        )
+        payload["employee_records"] = _finalize_employee_records(
             payload.get("employee_records", [])
         )
         # Step 5: Create timesheet record with payload

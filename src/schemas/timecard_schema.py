@@ -27,7 +27,7 @@ class TimecardResponse(BaseModel):
     assignment_id: UUID | None = None
     rule_id: UUID | None = None
     reviewed_by: UUID | None = None
-    week_ending: date
+    week_ending: date | None = None
     employee_name: str | None = None
     reg_hours: Decimal | None = None
     ot_hours: Decimal | None = None
@@ -50,6 +50,9 @@ class TimecardResponse(BaseModel):
 
 class TimecardUpdate(BaseModel):
     employee_name: str | None = Field(default=None, max_length=200)
+    client_name: str | None = Field(default=None, max_length=255)
+    department_name: str | None = Field(default=None, max_length=255)
+    week_ending: date | None = None
     reg_hours: Decimal | None = Field(default=None, ge=0)
     ot_hours: Decimal | None = Field(default=None, ge=0)
     dt_hours: Decimal | None = Field(default=None, ge=0)
