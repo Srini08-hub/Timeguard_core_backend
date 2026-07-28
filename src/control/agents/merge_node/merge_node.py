@@ -31,13 +31,8 @@ logger = logging.getLogger(__name__)
 
 # MAX_MERGE_RETRIES = 2
 
-DATE_FORMATS = [
-    "%Y-%m-%d",
-    "%d-%b-%Y",
-    "%d/%m/%y",
-    "%d/%m/%Y",
-]
-PARTIAL_DATE_FORMATS = ["%d-%b", "%d-%B", "%b-%d", "%B-%d"]
+DATE_FORMAT = "%Y-%m-%d"
+TIME_FORMAT = "%H:%M"
 
 
 def _is_missing(value: Any) -> bool:
@@ -53,19 +48,7 @@ def _to_decimal(value: Any) -> Decimal | None:
         return None
 
 
-def _nearest_year_date(month: int, day: int, reference_date: date) -> date | None:
-    candidates: list[date] = []
-    for year in (reference_date.year - 1, reference_date.year, reference_date.year + 1):
-        try:
-            candidates.append(date(year, month, day))
-        except ValueError:
-            continue
-    if not candidates:
-        return None
-    return min(candidates, key=lambda candidate: abs(candidate - reference_date))
-
-
-def _parse_date_value(value: Any, reference_date: date | None = None) -> date | None:
+def _parse_date_value(value: Any) -> date | None:
     if _is_missing(value):
         return None
     if isinstance(value, datetime):
@@ -75,25 +58,9 @@ def _parse_date_value(value: Any, reference_date: date | None = None) -> date | 
 
     text = str(value).strip()
     try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+        return datetime.strptime(text, DATE_FORMAT).date()
     except ValueError:
-        pass
-
-    for fmt in DATE_FORMATS:
-        try:
-            return datetime.strptime(text, fmt).date()
-        except ValueError:
-            continue
-
-    if reference_date is not None:
-        for fmt in PARTIAL_DATE_FORMATS:
-            try:
-                parsed = datetime.strptime(text, fmt).date()
-            except ValueError:
-                continue
-            return _nearest_year_date(parsed.month, parsed.day, reference_date)
-
-    return None
+        return None
 
 
 def _parse_time(value: Any) -> datetime | None:
@@ -101,12 +68,10 @@ def _parse_time(value: Any) -> datetime | None:
         return None
 
     text = str(value).strip()
-    for fmt in ("%I:%M %p", "%I:%M%p", "%H:%M", "%H:%M:%S"):
-        try:
-            return datetime.strptime(text, fmt)
-        except ValueError:
-            continue
-    return None
+    try:
+        return datetime.strptime(text, TIME_FORMAT)
+    except ValueError:
+        return None
 
 
 def _duration_hours(check_in: Any, check_out: Any) -> Decimal | None:
@@ -188,7 +153,7 @@ def _normalize_weekday_dates(
             if not isinstance(timesheet_record, dict):
                 continue
 
-            parsed_date = _parse_date_value(timesheet_record.get("date"), week_ending)
+            parsed_date = _parse_date_value(timesheet_record.get("date"))
             if parsed_date is not None:
                 timesheet_record["date"] = str(parsed_date)
                 timesheet_record["day"] = parsed_date.strftime("%A")
@@ -379,9 +344,7 @@ def _finalize_employee_records(records: list[dict[str, Any]]) -> list[dict[str, 
 
         daily_total = _sum_timesheet_record_hours(timesheet_records)
         existing_total = _to_decimal(employee_record.get("total_hours"))
-        if daily_total is not None and (
-            existing_total is None or daily_total > existing_total
-        ):
+        if daily_total is not None and (existing_total is None):
             employee_record["total_hours"] = _format_decimal(daily_total)
 
     return records
@@ -481,7 +444,7 @@ def _combine_merge_payloads(extracted_payloads: list[dict[str, Any]]) -> dict[st
             if _is_missing(employee_record.get("department")):
                 employee_record["department"] = global_department
 
-    combined["employee_records"] = _finalize_employee_records(list(employees_by_key.values()))
+    combined["employee_records"] = list(employees_by_key.values())
     return MergeResponse.model_validate(combined).model_dump()
 
 
@@ -542,12 +505,7 @@ async def merge_node(
         week_ending = None
 
         if week_ending_str:
-            for fmt in DATE_FORMATS:
-                try:
-                    week_ending = datetime.strptime(week_ending_str, fmt).date()
-                    break
-                except ValueError:
-                    continue
+            week_ending = _parse_date_value(week_ending_str)
 
         if week_ending_str and week_ending is None:
             logger.warning(

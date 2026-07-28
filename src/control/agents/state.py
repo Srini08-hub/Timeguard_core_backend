@@ -80,6 +80,7 @@ class TimeguardState(TypedDict):
     excel_anchor_hits: NotRequired[list[dict]]
     excel_context_snippet: NotRequired[str]
     excel_classification: NotRequired[Literal["TIMESHEET", "NOT_A_TIMESHEET"]]
+    excel_extraction_strategy: NotRequired[Literal["entire_sheet", "semantic_split"]]
     merged_result: NotRequired[dict]  # used
 
     # PDF classification state (from PDFClassifierState)

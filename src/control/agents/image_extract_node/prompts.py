@@ -28,9 +28,9 @@ Return structured data matching the canonical schema:
         {
           "date": "YYYY-MM-DD or null",
           "day": "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday or null",
-          "check_in": "HH:MM or null",
-          "check_out": "HH:MM or null",
-          "break_hour": "HH:MM or null",
+          "check_in": "HH:mm or null",
+          "check_out": "HH:mm or null",
+          "break_hour": "HH:mm or null",
           "hours": "string or null",
           "overtime_hours": "string or null",
           "confidence": 0.00
@@ -56,27 +56,29 @@ Identify:
 - Employee aliases: employee_name = Employee, Employee Name, Name. department = Department, Dept, Division, Business Unit, BU, Section.
 - Record aliases: check_in = In, In Time, Clock In, Start Time, Login, Punch In, in_time. check_out = Out, Out Time, Clock Out, End Time, Logout, Punch Out, out_time. break_hour = Break, Lunch, Meal Break, Break Time. hours = Hours, Worked Hours, Regular Hours. total_hours = Total Hours, Weekly Hours, Weekly Total. overtime_hours = OT, Overtime, OT Hours.
 
-### DATE RULES
-- When parsing dates, try India format first: DD/MM/YYYY or DD/MM/YY. If that fails, try US format: MM/DD/YYYY or MM/DD/YY. Also handle ISO/textual dates when explicitly visible.
-- Normalize all output dates to YYYY-MM-DD.
-- If no week ending is visible, set global_data.week_ending to null. Do not assume it, but still extract and preserve any row-level calendar dates that are explicitly visible.
-- Never output weekday names as dates. If a row has an explicit calendar date, normalize that date to YYYY-MM-DD even when global_data.week_ending is null. If a row only has a weekday name and global_data.week_ending is known, calculate the calendar date using the week ending date as Sunday.
-- Example: if week_ending = 2026-06-28, Monday -> 2026-06-22, Tuesday -> 2026-06-23, Wednesday -> 2026-06-24, Thursday -> 2026-06-25, Friday -> 2026-06-26, Saturday -> 2026-06-27, Sunday -> 2026-06-28.
-- If a row only has a weekday name and week_ending is unknown, set date to null; do not clear or ignore an explicit row-level date.
-- Always populate the day field. If the source explicitly provides a day name (e.g., Monday, Tue), use that full day name. If only a date is provided, calculate the day from the date (e.g., 2026-06-22 -> Monday). If neither date nor day is available, set day to null.
+### DATE NORMALIZATION RULES
+- Normalize every explicit visible date to YYYY-MM-DD during extraction, including global_data.week_ending and row-level dates.
+- Source dates may appear in US format MM/DD/YYYY or MM/DD/YY, Indian format DD/MM/YYYY or DD/MM/YY, ISO format, or textual formats.
+- When slash dates are ambiguous, use the clearest locale/context visible in the image. If the document context does not disambiguate, prefer Indian DD/MM/YYYY or DD/MM/YY.
+- For partial dates like 05-Oct, infer the year only from explicit visible context such as week_ending or a visible year. If the year cannot be inferred, set date to null.
+- Never output weekday names in the date field.
+- Preserve explicit weekday names in the day field using the full day name (e.g., Monday, Tuesday).
+- Do not calculate day from date during extraction. If only a date is provided and no weekday is explicitly present, set day to null.
+- Do not calculate date from week_ending + day during extraction. If only a weekday name is present, set date to null and preserve the day.
+- If neither date nor day is available, set both fields to null.
 
 ### HOURS ROUTING
 - Use employee-level total_hours when the source field is Total Hours, Weekly Hours, Weekly Total, or another weekly total alias.
-- If an employee has exactly one row and that row contains no date or day field, treat its hours value as employee total_hours, set date to week_ending if known, and leave hours null.
+- If an employee has exactly one row and that row contains no date or day field, treat its hours value as employee total_hours, leave date/day null, and leave hours null.
 - Use hours only for daily row-level hours where a date or day is present.
 - Never populate total_hours inside timesheet_records.
 - If a source provides both a daily breakdown and a weekly total, keep the daily rows with hours and do not duplicate the weekly total into every daily row.
 
-### TIME AND CONFIDENCE
+### TIME NORMALIZATION AND CONFIDENCE
 - Extract check_in, check_out, and break_hour from the source when present; do not invent missing values.
-- Normalize check_in and check_out to 24-hour HH:MM time format. Examples: 9 AM -> 09:00, 5:30 PM -> 17:30, 17:30 -> 17:30.
-- Normalize break_hour as a duration in HH:MM format, not as a decimal or bare number. Examples: 1 -> 01:00, 2 -> 02:00, 1.5 -> 01:30, 1.50 -> 01:30, 0.5 -> 00:30, 30 min -> 00:30.
-- If break_hour is already in HH:MM duration format, preserve it. If check_in, check_out, or break_hour is blank, missing, or unreadable, set it to null.
+- Normalize check_in and check_out to 24-hour HH:mm time format. Examples: 9 AM -> 09:00, 5:30 PM -> 17:30, 17:30 -> 17:30.
+- Normalize break_hour as a duration in HH:mm format, not as a decimal or bare number. Examples: 1 -> 01:00, 2 -> 02:00, 1.5 -> 01:30, 1.50 -> 01:30, 0.5 -> 00:30, 30 min -> 00:30.
+- If break_hour is already in HH:mm duration format, preserve it. If check_in, check_out, or break_hour is blank, missing, or unreadable, set it to null.
 - Never output decimal or bare numeric break_hour values such as "1", "1.5", "1.50", or "2".
 - Keep total_hours on the employee record and hours/overtime_hours as strings.
 - Set each record's confidence to the minimum confidence across visible fields used for that record.

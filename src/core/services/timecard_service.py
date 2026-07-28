@@ -6,8 +6,6 @@ from uuid import UUID
 from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from src.data.models.client import Client
-
 from src.control.agents.employee_matching_node.match_node import (
     MIN_MATCHING_SCORE,
     _fuzzy_match_department,
@@ -26,6 +24,7 @@ from src.control.agents.validation_nodes.validation_node import (
     _week_ending_from_payload,
 )
 from src.core.exceptions.custom_exception import ResourceNotFound, ValidationException
+from src.data.models.clients import Client
 from src.data.models.exception import ExceptionSeverity, ExceptionType
 from src.data.models.timecard import ExceptionSeverity as TimecardSeverity
 from src.data.models.timecard import Timecard, TimecardStatus

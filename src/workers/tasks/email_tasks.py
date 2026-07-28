@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 logger.info(settings.LANGSMITH_PROJECT)
 
 
-async def _classify_email_async(gmail_message_id: str) -> dict:
+async def _classify_email_async(
+    gmail_message_id: str,
+    excel_extraction_strategy: str | None = None,
+) -> dict:
     if postgress_client.SessionLocal is None:
         raise RuntimeError("Database session factory is not initialized")
 
@@ -26,8 +29,12 @@ async def _classify_email_async(gmail_message_id: str) -> dict:
 
     async with postgress_client.SessionLocal() as db:
         try:
+            initial_state = {"gmail_message_id": gmail_message_id}
+            if excel_extraction_strategy:
+                initial_state["excel_extraction_strategy"] = excel_extraction_strategy
+
             result = await graph.ainvoke(
-                cast(TimeguardState, {"gmail_message_id": gmail_message_id}),
+                cast(TimeguardState, initial_state),
                 config={
                     "configurable": {
                         DB_SESSION_CONFIG_KEY: db,
@@ -49,10 +56,17 @@ async def _classify_email_async(gmail_message_id: str) -> dict:
 
 
 @celery_app.task(name="classify_email")
-def classify_email(gmail_message_id: str) -> dict:
-    logger.info("Task classify_email started for %s", gmail_message_id)
+def classify_email(
+    gmail_message_id: str,
+    excel_extraction_strategy: str | None = None,
+) -> dict:
+    logger.info(
+        "Task classify_email started for %s with Excel strategy %s",
+        gmail_message_id,
+        excel_extraction_strategy or "entire_sheet",
+    )
     try:
-        return run_async(_classify_email_async(gmail_message_id))
+        return run_async(_classify_email_async(gmail_message_id, excel_extraction_strategy))
     except Exception:
         logger.exception("Classification failed for %s", gmail_message_id)
         raise

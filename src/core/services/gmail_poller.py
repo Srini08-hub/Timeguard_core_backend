@@ -8,6 +8,9 @@ from googleapiclient.errors import HttpError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.settings import settings
+from src.core.services.excel_extraction_strategy_service import (
+    excel_extraction_strategy_service,
+)
 from src.core.services.gmail_service import GmailService
 from src.data.repositories.email_pool_repository import EmailPoolStateRepository
 from src.workers.tasks.email_tasks import classify_email
@@ -129,8 +132,15 @@ class GmailPoller:
                 #     args=[message_id],
                 #     queue=settings.CELERY_TASK_QUEUE_NAME,
                 # )
-                classify_email.delay(message_id)
-                logger.info("hello")
+                classify_email.delay(
+                    message_id,
+                    excel_extraction_strategy_service.get_strategy(),
+                )
+                logger.info(
+                    "Queued email %s with Excel strategy %s",
+                    message_id,
+                    excel_extraction_strategy_service.get_strategy(),
+                )
 
             if mailbox_address is not None and newest_history_id is not None:
                 await repository.update_history_id(mailbox_address, str(newest_history_id))

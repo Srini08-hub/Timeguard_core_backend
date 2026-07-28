@@ -277,29 +277,59 @@ def excel_extraction_node(state: TimeguardState) -> dict:
     file_path = resolve_attachment_to_local_path(attachement)
     if file_path is None:
         raise ValueError("Could not resolve attachment path for Excel extraction")
-    blocks = extract_workbook(str(file_path))
+    strategy = state.get("excel_extraction_strategy", "entire_sheet")
+    blocks = extract_workbook(str(file_path), strategy=strategy)
     # trace_path = _dump_blocks_for_trace(file_path, blocks)
     # logger.info("Probed workbook '%s': found %d sheet block(s).", file_path, len(blocks))
     # logger.info("Saved Excel extraction trace to %s", trace_path)
     return {"current_excel_block_index": 0, "blocks": blocks}
 
 
-def extract_workbook(path: str) -> list[SerialisedBlock]:
+def extract_workbook(
+    path: str,
+    *,
+    strategy: str = "entire_sheet",
+) -> list[SerialisedBlock]:
     """
-    Process every selected worksheet as one block per sheet.
+    Process every selected worksheet using the requested Excel extraction strategy.
 
-    If sheet_name is None, processes every sheet in the workbook. The returned
-    list has one SerialisedBlock per non-empty sheet.
+    entire_sheet returns one SerialisedBlock per non-empty sheet. semantic_split
+    returns one or more SerialisedBlock objects per sheet and raises if semantic
+    splitting cannot produce a valid split.
     """
     # probes = probe_workbook(path, sheet_name=sheet_name)
     probes = probe_workbook(path)
     logger.info("Probed workbook '%s': found %d sheet(s).", path, len(probes))
     logger.info("Probed sheets: %s", ", ".join(probes.keys()))
+    logger.info("Excel extraction strategy: %s", strategy)
 
     results: list[SerialisedBlock] = []
-    for index, probe in enumerate(probes.values()):
-        serialised = serialise_sheet(probe, block_index=index)
-        logger.info("Serialised sheet %d: %s", index, serialised)
+    next_block_index = 0
+    for probe in probes.values():
+        if strategy == "semantic_split":
+            from src.control.agents.excel_extract_node.semantic_split import (
+                serialise_sheet_semantic_split,
+            )
+
+            semantic_blocks = serialise_sheet_semantic_split(
+                probe,
+                first_block_index=next_block_index,
+            )
+            logger.info(
+                "Serialised sheet %s into %d semantic block(s).",
+                probe.sheet_name,
+                len(semantic_blocks),
+            )
+            results.extend(semantic_blocks)
+            next_block_index += len(semantic_blocks)
+            continue
+
+        if strategy != "entire_sheet":
+            raise ValueError(f"Unsupported Excel extraction strategy: {strategy}")
+
+        serialised = serialise_sheet(probe, block_index=next_block_index)
+        logger.info("Serialised sheet %d: %s", next_block_index, serialised)
+        next_block_index += 1
         if serialised.n_records > 0:
             results.append(serialised)
 

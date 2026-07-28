@@ -9,6 +9,9 @@ from src.control.agents.graph_config import (
 )
 from src.control.agents.state import TimeguardState
 from src.core.exceptions.custom_exception import ValidationException
+from src.core.services.excel_extraction_strategy_service import (
+    excel_extraction_strategy_service,
+)
 from src.core.services.gmail_service import GmailService
 from src.data.models.email import EmailStatus
 from src.data.repositories.email_repository import EmailRepository
@@ -113,7 +116,15 @@ class EmailService:
 
             # Use gmail_message_id as thread_id to resume from checkpoint
             await graph.ainvoke(
-                cast(TimeguardState, {"gmail_message_id": email.gmail_message_id}),
+                cast(
+                    TimeguardState,
+                    {
+                        "gmail_message_id": email.gmail_message_id,
+                        "excel_extraction_strategy": (
+                            excel_extraction_strategy_service.get_strategy()
+                        ),
+                    },
+                ),
                 config={
                     "configurable": {
                         DB_SESSION_CONFIG_KEY: self.email_repository._session,
